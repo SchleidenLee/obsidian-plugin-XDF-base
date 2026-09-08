@@ -114,6 +114,7 @@ export class QuickAddSettingsTab extends PluginSettingTab {
 	override getSettingDefinitions(): SettingDefinitionItem<SettingsKey>[] {
 		const groups: SettingDefinitionItem<SettingsKey>[] = [
 			this.choicesGroup(),
+			this.folderStructureGroup(),
 			this.aiGroup(),
 			this.databaseGroup(),
 			this.advancedPage(),
@@ -166,6 +167,30 @@ export class QuickAddSettingsTab extends PluginSettingTab {
 				{
 					name: "选项列表",
 					render: (setting) => this.renderChoicesView(setting),
+				},
+			],
+		};
+	}
+
+	private folderStructureGroup(): SettingDefinitionGroup<SettingsKey> {
+		return {
+			type: "group",
+			heading: "文件结构",
+			items: [
+				{
+					name: "活跃课程文件夹",
+					desc: "新建课程档案的默认存放位置。",
+					render: (setting) => this.renderFolderPathInput(setting, "active"),
+				},
+				{
+					name: "归档文件夹",
+					desc: "归档课程档案的存放位置。",
+					render: (setting) => this.renderFolderPathInput(setting, "archived"),
+				},
+				{
+					name: "行政文件夹",
+					desc: "行政管理类文件的存放位置。",
+					render: (setting) => this.renderFolderPathInput(setting, "admin"),
 				},
 			],
 		};
@@ -841,6 +866,41 @@ export class QuickAddSettingsTab extends PluginSettingTab {
 
 		return () => {
 			// no-op
+		};
+	}
+
+	/**
+	 * 单个文件夹路径输入框（带文件夹 suggester），用于文件结构设置。
+	 * key 为 folderStructure 下的子字段名（active / archived / admin）。
+	 */
+	private renderFolderPathInput(setting: Setting, key: "active" | "archived" | "admin"): () => void {
+		const folderSuggestions = sortFolderPathsByTree(
+			getAllFolderPathsInVault(this.app),
+		).filter((path) => path !== "/");
+
+		const getValue = (): string =>
+			settingsStore.getState().folderStructure[key] ?? "";
+		const setValue = (value: string): void => {
+			const current = settingsStore.getState().folderStructure;
+			settingsStore.setState({
+				folderStructure: { ...current, [key]: value },
+			});
+		};
+
+		setting.addText((text) => {
+			text.setPlaceholder(key)
+				.setValue(getValue())
+				.onChange((value) => setValue(value));
+			text.inputEl.style.width = "100%";
+			new GenericTextSuggester(
+				this.app,
+				text.inputEl,
+				folderSuggestions,
+			);
+		});
+
+		return () => {
+			// suggester 随 setting 销毁自动清理
 		};
 	}
 

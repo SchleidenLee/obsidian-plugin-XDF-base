@@ -28,10 +28,10 @@ import { openChoiceLauncher } from "./gui/suggesters/openChoiceLauncher";
 import { QuickAddApi } from "./quickAddApi";
 import migrate from "./migrations/migrate";
 import { settingsStore } from "./settingsStore";
-import { UpdateModal } from "./gui/UpdateModal/UpdateModal";
+
 import { FieldSuggestionCache } from "./utils/FieldSuggestionCache";
 import { interactivePromptServer } from "./interactive/interactivePromptServer";
-import { parseSemver } from "./utils/semver";
+
 import {
 	childChoicesOf,
 	dedupeChoicesById,
@@ -382,8 +382,6 @@ export default class QuickAdd extends Plugin {
 			}, 5_000);
 		});
 
-		this.announceUpdate();
-
 		// ========= XDF-Base 扩展入口 =========
 		// 必须在 onload 最末尾启动，因为前面的初始化（settings、choices、commands）可能依赖数据状态。
 		// 失败也无所谓——XdfBaseExtension 内部会 try/catch + Notice。
@@ -720,49 +718,4 @@ export default class QuickAdd extends Plugin {
 			.filter((file) => isPathWithinTemplateFolders(file.path, folders));
 	}
 
-	private announceUpdate() {
-		// `isFeatureUpdate`: the "major" announce tier promises "new features, breaking
-		// changes". QuickAdd ships features as semantic-release feat: commits, which become
-		// MINOR bumps (e.g. 2.13.x -> 2.14.0), never MAJOR — so gating purely on the major
-		// digit (isMajorUpdate) would suppress the modal for every feature release. Treat a
-		// major OR minor increase as a feature update so feature releases are announced as
-		// documented, while patch-only bumps stay quiet. Unparseable versions fall back to
-		// showing the update (mirrors isMajorUpdate's err-on-the-side-of-showing default).
-		const isFeatureUpdate = (
-			currentVersion: string,
-			previousVersion: string,
-		): boolean => {
-			const current = parseSemver(currentVersion);
-			const previous = parseSemver(previousVersion);
-			if (!current || !previous) return true;
-			if (current.major !== previous.major)
-				return current.major > previous.major;
-			return current.minor > previous.minor;
-		};
-
-		const currentVersion = this.manifest.version;
-		const knownVersion = this.settings.version;
-
-		if (currentVersion === knownVersion) return;
-
-		const preference = this.settings.announceUpdates;
-		let shouldAnnounce = true;
-
-		if (preference === "none") {
-			shouldAnnounce = false;
-		} else if (
-			preference === "major" &&
-			!isFeatureUpdate(currentVersion, knownVersion)
-		) {
-			shouldAnnounce = false;
-		}
-
-		this.settings.version = currentVersion;
-		void this.saveSettings();
-
-		if (!shouldAnnounce) return;
-
-		const updateModal = new UpdateModal(this.app, knownVersion);
-		updateModal.open();
-	}
 }

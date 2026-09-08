@@ -295,7 +295,7 @@ function buildIndexLink(kind, folderName, lessonNumber, dateStr) {
     const label = kind === "class"
         ? "📖 Lesson " + lessonNumber + " - " + dateStr
         : "第 " + lessonNumber + " 课 - " + dateStr;
-    return "- [[" + folderName + "|" + label + "]]";
+    return "- [[" + "./" + folderName + "|" + label + "]]";
 }
 
 function insertNewCourseTypeBlock(content, courseType, link) {
@@ -342,9 +342,9 @@ function buildLessonNavFrontmatter(opts) {
     const kindTag = opts.kind === "class" ? TAGS.CLASS : TAGS.VIP;
     const links = [];
     if (opts.prevLessonFolderName) {
-        links.push("[[" + opts.prevLessonFolderName + "|" + LINK_PREV + "]]");
+        links.push("[[" + "../" + opts.prevLessonFolderName + "|" + LINK_PREV + "]]");
     }
-    links.push("[[" + opts.archiveName + "|" + LINK_ARCHIVE + "]]");
+    links.push("[[" + "../" + opts.archiveName + "|" + LINK_ARCHIVE + "]]");
     const fields = {
         Date: opts.isoDate,
         lesson_number: opts.lessonNumber,
@@ -523,14 +523,36 @@ async function pickSubjectIfIELTS(courseType) {
 }
 
 async function pickTargetFolder(placeholder) {
-    const all = getAllFolders();
-    const options = ["(根目录)"].concat(all);
-    const picked = await qa().suggester(
-        options, options, false,
+    var plugins = app.plugins.plugins;
+    var xdfPlugin = plugins["xdf-base"] || plugins.quickadd;
+    var fs = (xdfPlugin && xdfPlugin.settings && xdfPlugin.settings.folderStructure) || {};
+    var activeFolder = fs.active || "Current Class";
+    var archivedFolder = fs.archived || "Archived";
+
+    var quickOptions = [
+        activeFolder + " (默认)",
+        archivedFolder,
+        "其他..."
+    ];
+    var picked = await qa().suggester(
+        quickOptions, quickOptions, false,
         placeholder || "选择存放位置"
     );
     if (!picked) throw new Error("未选择存放位置");
-    return picked === "(根目录)" ? "" : picked;
+
+    if (picked === "其他...") {
+        var all = getAllFolders();
+        var fullOptions = ["(根目录)"].concat(all);
+        var fullPicked = await qa().suggester(
+            fullOptions, fullOptions, false,
+            placeholder || "选择存放位置"
+        );
+        if (!fullPicked) throw new Error("未选择存放位置");
+        return fullPicked === "(根目录)" ? "" : fullPicked;
+    }
+
+    if (picked === activeFolder + " (默认)") return activeFolder;
+    return picked;
 }
 
 async function pickFolder(placeholder, filterFn) {
@@ -710,11 +732,11 @@ function buildNav(opts) {
 
     const fileList = [
         "## 📂本节课文件",
-        "- [[" + names.note + "|📝 课堂笔记]]",
-        "- [[" + names.wordlist + "|📚 词汇表]]",
-        "- [[" + names.grammar + "|📖 语法笔记]]",
-        "- [[" + names.homework + "|✍️ 课后作业]]",
-        "- [[" + names.quiz + "|📋 下节课入门测]]",
+        "- [[" + "./" + names.note + "|📝 课堂笔记]]",
+        "- [[" + "./" + names.wordlist + "|📚 词汇表]]",
+        "- [[" + "./" + names.grammar + "|📖 语法笔记]]",
+        "- [[" + "./" + names.homework + "|✍️ 课后作业]]",
+        "- [[" + "./" + names.quiz + "|📋 下节课入门测]]",
         "---"
     ].join("\n");
 
@@ -723,7 +745,7 @@ function buildNav(opts) {
         middle = [
             "## 📝 课堂反馈",
             "- [ ] 提交反馈",
-            "- [[" + names.feedback + "|💬 课堂反馈]]",
+            "- [[" + "./" + names.feedback + "|💬 课堂反馈]]",
             "",
             "### 授课内容",
             "",
@@ -763,7 +785,7 @@ function buildNav(opts) {
         middle = [
             "## 📝 课堂反馈",
             "- [ ] 提交反馈",
-            "- [[" + names.feedback + "|💬 课堂反馈]]",
+            "- [[" + "./" + names.feedback + "|💬 课堂反馈]]",
             "### 授课内容",
             "",
             "---"
@@ -916,7 +938,7 @@ async function appendNextLessonLinkToPrev(archiveFile, lessonNumber) {
     const prevFile = app.vault.getAbstractFileByPath(prevNavPath);
     if (!prevFile) return;
     const content = await app.vault.read(prevFile);
-    const nextLink = "[[" + buildLessonFolderName(archiveFile.basename, lessonNumber) + "|" + LINK_NEXT + "]]";
+    const nextLink = "[[" + "../" + buildLessonFolderName(archiveFile.basename, lessonNumber) + "|" + LINK_NEXT + "]]";
     if (content.indexOf(nextLink) !== -1) return;
     await app.vault.modify(prevFile, appendLinkListEntry(content, "links", nextLink));
 }

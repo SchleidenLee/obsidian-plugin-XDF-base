@@ -61,6 +61,11 @@ export interface QuickAddSettings {
 	showInputCancellationNotification: boolean;
 	enableTemplatePropertyTypes: boolean;
 	dateAliases: Record<string, string>;
+	folderStructure: {
+		active: string;
+		archived: string;
+		admin: string;
+	};
 	ai: {
 		// Either a configured model's name or the "Ask me" sentinel. Model["name"]
 		// is `string`, which already covers the sentinel — adding `| "Ask me"` would
@@ -127,6 +132,11 @@ export const DEFAULT_SETTINGS: QuickAddSettings = {
 	showInputCancellationNotification: false,
 	enableTemplatePropertyTypes: false,
 	dateAliases: DEFAULT_DATE_ALIASES,
+	folderStructure: {
+		active: "Current Class",
+		archived: "Archived",
+		admin: "Admin",
+	},
 	ai: {
 		// XDF：脚本调 ai.prompt() 不传模型时使用此默认模型。
 		// 老师在 设置 → AI → 配置 AI 里可添加 provider 并更换模型。

@@ -1,0 +1,136 @@
+# PENDING
+
+---
+
+## 1. 课程链接改为相对路径
+
+### 问题
+当前脚本生成的 wiki 链接使用裸名（如 `[[Wordlist 1| 词汇表]]`），Obsidian 会自动解析为绝对路径。
+当 vault 中存在同名文件时可能指向错误目标，且移动档案文件夹后链接可能失效。
+
+### 目标
+将所有链接改为以文件位置为基准的相对路径格式，确保：
+1. 移动档案文件夹后链接不失效
+2. 同名文件不会互相干扰
+3. 不依赖 Obsidian "始终更新内部链接" 设置
+
+### 修改文件
+`src/xdf/scripts/archive-utils.ts`
+
+### 具体修改点
+
+#### 1.1 `buildNav` 函数 — 课次内文件列表（第 713-717 行）
+当前：`- [[" + names.note + "|📝 课堂笔记]]"`
+改为：`- [[" + "./" + names.note + "|📝 课堂笔记]]"`
+
+涉及链接：
+- 课堂笔记
+- 词汇表
+- 语法笔记
+- 课后作业
+- 下节课入门测
+
+#### 1.2 `buildNav` 函数 — 反馈链接（第 726 行、第 766 行）
+当前：`- [[" + names.feedback + "|💬 课堂反馈]]"`
+改为：`- [[" + "./" + names.feedback + "|💬 课堂反馈]]"`
+
+#### 1.3 `buildLessonNavFrontmatter` 函数 — 上一课链接（第 345 行）
+当前：`links.push("[[" + opts.prevLessonFolderName + "|" + LINK_PREV + "]]")`
+改为：`links.push("[[" + "../" + opts.prevLessonFolderName + "|" + LINK_PREV + "]]")`
+
+#### 1.4 `buildLessonNavFrontmatter` 函数 — 档案首页链接（第 347 行）
+当前：`links.push("[[" + opts.archiveName + "|" + LINK_ARCHIVE + "]]")`
+改为：`links.push("[[" + "../" + opts.archiveName + "|" + LINK_ARCHIVE + "]]")`
+
+#### 1.5 `appendNextLessonLinkToPrev` 函数 — 下一课链接（第 919 行）
+当前：`const nextLink = "[[" + buildLessonFolderName(...) + "|" + LINK_NEXT + "]]"`
+改为：`const nextLink = "[[" + "../" + buildLessonFolderName(...) + "|" + LINK_NEXT + "]]"`
+
+#### 1.6 `buildIndexLink` 函数 — 档案页课程索引（第 298 行）
+当前：`return "- [[" + folderName + "|" + label + "]]"`
+改为：`return "- [[" + "./" + folderName + "|" + label + "]]"`
+
+### 注意事项
+- 课次 nav 文件位于 `{档案文件夹}/{课次文件夹}/Nav.md`
+- 课次内文件（note/wordlist 等）与 nav 同级，用 `./`
+- 档案首页和兄弟课次在父目录，用 `../`
+- 档案页在档案文件夹根目录，课次子文件夹用 `./`
+
+---
+
+## 2. 文件结构管理功能
+
+### 目标
+在 base 插件中实现文件夹结构管理，规范课程文件的存放位置。
+
+### 设计方案
+
+#### 2.1 设置项
+在插件设置面板中增加三个文件夹路径配置：
+- **活跃课程文件夹**（默认：`Current Class`）
+- **归档文件夹**（默认：`Archived`）
+- **行政文件夹**（默认：`Admin`）
+
+存储位置：`plugin.settings` 中新增字段（通过 `app.plugins.plugins["xdf-base"].settings` 访问）
+
+#### 2.2 脚本路径限制
+修改建档/课次记录脚本中的路径选择器：
+- 建档脚本：默认指向活跃课程文件夹，提供"其他"选项
+- 课次记录脚本：自动跟随父档案路径（无需选择）
+- 其他脚本：根据类型推荐对应文件夹
+
+#### 2.3 右键归档命令
+
+**注册位置**：`src/xdf/XdfBaseExtension.ts` 的 `initialize()` 中
+
+**注册方式**：
+```typescript
+this.app.workspace.on('file-menu', (menu, file) => {
+  if (!(file instanceof TFile)) return;
+  const cache = this.app.metadataCache.getFileCache(file);
+  const fm = cache?.frontmatter;
+  const isArchive = fm?.kind === 'class' || fm?.kind === 'vip';
+  const isActive = fm?.status === 'active';
+  if (isArchive && isActive) {
+    menu.addItem(item => {
+      item.setTitle('归档此课程')
+        .setIcon('archive')
+        .onClick(async () => {
+          // 1. 读取 settings 中的归档文件夹路径
+          // 2. 计算新路径：归档文件夹/{档案名}/
+          // 3. app.vault.rename(file, newPath) — Obsidian 自动更新内部链接
+          // 4. 更新 frontmatter status: archived
+        });
+    });
+  }
+})
+```
+
+**判断逻辑**：
+- 必须是 `TFile`（排除文件夹）
+- `kind` 为 `class` 或 `vip`（课程档案）
+- `status` 为 `active`（活跃状态）
+- 归档后 `status` 变为 `archived`，右键菜单自动消失
+
+**归档流程**：
+1. 从 `plugin.settings` 读取归档文件夹路径
+2. 计算新路径：`{归档文件夹}/{档案文件夹名}/`
+3. `app.vault.rename(file, newPath)` 移动文件（Obsidian 自动更新所有相关链接）
+4. 更新 frontmatter `status: archived`
+
+### 技术可行性
+- 脚本可通过 `app.plugins.plugins["xdf-base"].settings` 访问插件数据
+- 路径选择器修改：在 `archive-utils.ts` 的选择器函数中过滤文件夹列表
+- 右键命令：通过 `registerEvent(app.workspace.on('file-menu', ...))` 实现
+- `metadataCache.getFileCache(file)` 是 Obsidian 内置缓存，零开销
+- `app.vault.rename()` 会触发 vault rename 事件，数据库自动同步
+
+### 修改文件
+- `src/settings.ts` — 新增文件夹路径设置项
+- `src/xdf/XdfBaseExtension.ts` — 注册右键归档命令
+- `src/xdf/scripts/archive-utils.ts` — 路径选择器过滤逻辑
+
+### 不考虑的范围
+- 从 Archived 直接建档（结构脆弱，需改多处）
+- ClassTracker 插件改动
+- 现有文件迁移脚本
