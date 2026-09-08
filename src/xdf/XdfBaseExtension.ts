@@ -12,7 +12,7 @@
  */
 
 import type { App, Plugin } from "obsidian";
-import { Notice, TFile, TFolder } from "obsidian";
+import { Modal, Notice, TFile, TFolder } from "obsidian";
 import { DBConnection, DBSync, createDBApi, type XdfDBApi } from "./db";
 import { rebuildDatabase as rebuildVaultDatabase, DBWriter } from "./db/Builder";
 import { SchemaManager } from "./db/Schema";
@@ -136,14 +136,29 @@ export class XdfBaseExtension {
                     const fm = cache?.frontmatter;
                     const tags: string[] = fm?.tags || [];
                     const isArchive = tags.includes('#档案');
-                    const isActive = fm?.status === 'active';
+                    const status = fm?.status;
 
-                    if (isArchive && isActive) {
+                    if (isArchive && (status === 'active' || status === 'archived')) {
                         menu.addItem(item => {
                             item.setTitle('归档此课程')
                                 .setIcon('archive')
                                 .onClick(async () => {
                                     try {
+                                        if (status === 'archived') {
+                                            const confirmed = await new Promise<boolean>(resolve => {
+                                                const modal = new Modal(this.app);
+                                                modal.onOpen = () => {
+                                                    const {contentEl} = modal;
+                                                    contentEl.createEl('p', {text: '该课程已标记为 archived，是否仍执行归档操作（转换链接并移动文件夹）？'});
+                                                    contentEl.createDiv('modal-button-container', (el) => {
+                                                        el.createEl('button', {text: '取消'}).onclick = () => { resolve(false); modal.close(); };
+                                                        el.createEl('button', {text: '确认', cls: 'mod-cta'}).onclick = () => { resolve(true); modal.close(); };
+                                                    });
+                                                };
+                                                modal.open();
+                                            });
+                                            if (!confirmed) return;
+                                        }
                                         const settings = (this.plugin as any).settings;
                                         const archivedFolder: string = settings?.folderStructure?.archived || "Archived";
                                         const folderName = archiveFolder!.name;
