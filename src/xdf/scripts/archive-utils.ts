@@ -938,7 +938,9 @@ async function appendNextLessonLinkToPrev(archiveFile, lessonNumber) {
     const prevFile = app.vault.getAbstractFileByPath(prevNavPath);
     if (!prevFile) return;
     const content = await app.vault.read(prevFile);
-    const nextLink = "[[" + "../" + buildLessonFolderName(archiveFile.basename, lessonNumber) + "|" + LINK_NEXT + "]]";
+    const nextFolderName = buildLessonFolderName(archiveFile.basename, lessonNumber);
+    const nextNavName = getLessonFileNames(archiveFile.basename, lessonNumber).nav;
+    const nextLink = "[[" + "../" + nextFolderName + "/" + nextNavName + "|" + LINK_NEXT + "]]";
     if (content.indexOf(nextLink) !== -1) return;
     await app.vault.modify(prevFile, appendLinkListEntry(content, "links", nextLink));
 }
