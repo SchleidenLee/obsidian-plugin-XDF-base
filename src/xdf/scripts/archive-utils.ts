@@ -342,7 +342,7 @@ function buildLessonNavFrontmatter(opts) {
     const kindTag = opts.kind === "class" ? TAGS.CLASS : TAGS.VIP;
     const links = [];
     if (opts.prevLessonFolderName) {
-        links.push("[[" + "../" + opts.prevLessonFolderName + "|" + LINK_PREV + "]]");
+        links.push("[[" + "../" + opts.prevLessonFolderName + "/" + opts.prevLessonFolderName + "|" + LINK_PREV + "]]");
     }
     links.push("[[" + "../" + opts.archiveName + "|" + LINK_ARCHIVE + "]]");
     const fields = {
