@@ -295,7 +295,7 @@ function buildIndexLink(kind, folderName, lessonNumber, dateStr) {
     const label = kind === "class"
         ? "📖 Lesson " + lessonNumber + " - " + dateStr
         : "第 " + lessonNumber + " 课 - " + dateStr;
-    return "- [[" + "./" + folderName + "|" + label + "]]";
+    return "- [[" + "./" + folderName + "/" + folderName + "|" + label + "]]";
 }
 
 function insertNewCourseTypeBlock(content, courseType, link) {
