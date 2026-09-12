@@ -578,7 +578,10 @@ async function pickArchiveByKind(kind, placeholder) {
     for (let i = 0; i < files.length; i++) {
         const f = files[i];
         if (f.path.indexOf(".trash") !== -1) continue;
-        if (fileHasTags(f, [TAGS.ARCHIVE, kindTag])) candidates.push(f);
+        if (!fileHasTags(f, [TAGS.ARCHIVE, kindTag])) continue;
+        const cache = app.metadataCache.getFileCache(f);
+        if (cache && cache.frontmatter && cache.frontmatter.status === "archived") continue;
+        candidates.push(f);
     }
     if (candidates.length === 0) {
         new Notice("未找到 " + kindTag + " 档案，请先建档");

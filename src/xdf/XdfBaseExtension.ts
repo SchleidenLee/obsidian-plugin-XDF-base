@@ -12,7 +12,7 @@
  */
 
 import type { App, Plugin } from "obsidian";
-import { Modal, Notice, TFile, TFolder } from "obsidian";
+import { Notice, TFile, TFolder } from "obsidian";
 import { DBConnection, DBSync, createDBApi, type XdfDBApi } from "./db";
 import { rebuildDatabase as rebuildVaultDatabase, DBWriter } from "./db/Builder";
 import { SchemaManager } from "./db/Schema";
@@ -108,16 +108,14 @@ export class XdfBaseExtension {
             console.error("[XDF-Base] InlineGroup 渲染挂载失败:", err);
         }
 
-        // 6. 右键菜单「归档此课程」
+        // 6. 右键菜单：active → 归档，archived → 恢复
         try {
             this.plugin.registerEvent(
                 this.app.workspace.on('file-menu', (menu, file) => {
-                    // 支持右键文件夹或文件
                     let archiveFile: TFile | null = null;
                     let archiveFolder: TFolder | null = null;
 
                     if (file instanceof TFolder) {
-                        // 右键文件夹 → 找同名 .md 档案页
                         const candidate = file.children.find(
                             c => c instanceof TFile && c.basename === file.name
                         ) as TFile | undefined;
@@ -135,79 +133,81 @@ export class XdfBaseExtension {
                     const cache = this.app.metadataCache.getFileCache(archiveFile);
                     const fm = cache?.frontmatter;
                     const tags: string[] = fm?.tags || [];
-                    const isArchive = tags.includes('#档案');
-                    const status = fm?.status;
+                    if (!tags.includes('#档案')) return;
 
-                    if (isArchive && (status === 'active' || status === 'archived')) {
+                    const status = fm?.status;
+                    const folder = archiveFolder;
+                    const page = archiveFile;
+
+                    if (status === 'active') {
                         menu.addItem(item => {
                             item.setTitle('归档此课程')
                                 .setIcon('archive')
-                                .onClick(async () => {
-                                    try {
-                                        if (status === 'archived') {
-                                            const confirmed = await new Promise<boolean>(resolve => {
-                                                const modal = new Modal(this.app);
-                                                modal.onOpen = () => {
-                                                    const {contentEl} = modal;
-                                                    contentEl.createEl('p', {text: '该课程已标记为 archived，是否仍执行归档操作（转换链接并移动文件夹）？'});
-                                                    contentEl.createDiv('modal-button-container', (el) => {
-                                                        el.createEl('button', {text: '取消'}).onclick = () => { resolve(false); modal.close(); };
-                                                        el.createEl('button', {text: '确认', cls: 'mod-cta'}).onclick = () => { resolve(true); modal.close(); };
-                                                    });
-                                                };
-                                                modal.open();
-                                            });
-                                            if (!confirmed) return;
-                                        }
-                                        const settings = (this.plugin as any).settings;
-                                        const archivedFolder: string = settings?.folderStructure?.archived || "Archived";
-                                        const folderName = archiveFolder!.name;
-                                        const newFolderPath = archivedFolder + "/" + folderName;
-
-                                        // 确保归档父文件夹存在（不创建子文件夹，rename 会移动整个文件夹）
-                                        const parentExists = this.app.vault.getAbstractFileByPath(archivedFolder);
-                                        if (!parentExists) {
-                                            await this.app.vault.createFolder(archivedFolder);
-                                        }
-
-                                        // 归档前将文件夹内所有绝对路径 wiki 链接转为相对路径
-                                        const xdf = getXdfBaseInstance();
-                                        if (xdf) {
-                                            const result = await xdf.convertFolderLinksToRelative(archiveFolder!);
-                                            if (result.modified > 0) {
-                                                console.log(`[XDF-Base] 归档链接转换：${result.modified} 个文件已更新`);
-                                            }
-                                            for (const e of result.errors) {
-                                                console.warn(`[XDF-Base] 链接转换失败：${e.file} - ${e.message}`);
-                                            }
-                                        }
-
-                                        // 移动整个文件夹（Obsidian 自动更新内部链接）
-                                        await this.app.vault.rename(archiveFolder!, newFolderPath);
-
-                                        // 更新 frontmatter status
-                                        const movedFile = this.app.vault.getAbstractFileByPath(newFolderPath + "/" + archiveFile!.name);
-                                        if (movedFile instanceof TFile) {
-                                            const content = await this.app.vault.read(movedFile);
-                                            const updated = content.replace(
-                                                /status:\s*["']?active["']?/,
-                                                'status: archived'
-                                            );
-                                            await this.app.vault.modify(movedFile, updated);
-                                        }
-
-                                        new Notice("✅ 已归档：" + folderName);
-                                    } catch (err) {
-                                        console.error("[XDF-Base] 归档失败:", err);
-                                        new Notice("❌ 归档失败：" + err);
-                                    }
-                                });
+                                .onClick(() => this.relocateArchive(folder, page, 'archived'));
+                        });
+                    } else if (status === 'archived') {
+                        menu.addItem(item => {
+                            item.setTitle('恢复此课程')
+                                .setIcon('undo')
+                                .onClick(() => this.relocateArchive(folder, page, 'active'));
                         });
                     }
                 })
             );
         } catch (err) {
-            console.error("[XDF-Base] 右键归档命令注册失败:", err);
+            console.error("[XDF-Base] 右键归档/恢复命令注册失败:", err);
+        }
+    }
+
+    /**
+     * 归档：status → archived，整夹搬到归档目录。
+     * 恢复：status → active，整夹搬到活跃课程目录。
+     * 已在目标目录则只改 status。目标处已有其他同名夹则中止。
+     */
+    private async relocateArchive(
+        folder: TFolder,
+        page: TFile,
+        targetStatus: 'active' | 'archived',
+    ): Promise<void> {
+        const isArchive = targetStatus === 'archived';
+        const actionLabel = isArchive ? '归档' : '恢复';
+        const fromStatus = isArchive ? 'active' : 'archived';
+        try {
+            const settings = (this.plugin as any).settings;
+            const fs = settings?.folderStructure || {};
+            const destParent: string = isArchive
+                ? (fs.archived || "Archived")
+                : (fs.active || "Current Class");
+            const folderName = folder.name;
+            const newFolderPath = destParent + "/" + folderName;
+
+            if (folder.path !== newFolderPath) {
+                const destExists = this.app.vault.getAbstractFileByPath(newFolderPath);
+                if (destExists) {
+                    new Notice("❌ " + actionLabel + "失败：目标已存在 " + newFolderPath);
+                    return;
+                }
+                const parentExists = this.app.vault.getAbstractFileByPath(destParent);
+                if (!parentExists) {
+                    await this.app.vault.createFolder(destParent);
+                }
+                await this.app.vault.rename(folder, newFolderPath);
+            }
+
+            const movedFile = this.app.vault.getAbstractFileByPath(newFolderPath + "/" + page.name);
+            if (movedFile instanceof TFile) {
+                const content = await this.app.vault.read(movedFile);
+                const updated = content.replace(
+                    new RegExp("status:\\s*[\"']?" + fromStatus + "[\"']?"),
+                    "status: " + targetStatus
+                );
+                await this.app.vault.modify(movedFile, updated);
+            }
+
+            new Notice("✅ 已" + actionLabel + "：" + folderName);
+        } catch (err) {
+            console.error("[XDF-Base] " + actionLabel + "失败:", err);
+            new Notice("❌ " + actionLabel + "失败：" + err);
         }
     }
 
@@ -279,56 +279,6 @@ export class XdfBaseExtension {
             await this.db.save();
             console.log(`[XDF Base] 启动对账完成：补写 ${stale.length} 个文件`);
         }
-    }
-
-    /**
-     * 将指定文件夹内所有 md 文件的绝对路径 wiki 链接改为相对路径。
-     * 归档时调用，确保移动后链接不失效。
-     */
-    async convertFolderLinksToRelative(folder: TFolder): Promise<{ modified: number; errors: { file: string; message: string }[] }> {
-        const files = folder.children.filter(c => c instanceof TFile && c.extension === "md") as TFile[];
-        let modified = 0;
-        const errors: { file: string; message: string }[] = [];
-
-        const wikiLinkRe = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-
-        for (const file of files) {
-            try {
-                const content = await this.app.vault.read(file);
-                let changed = false;
-
-                const newContent = content.replace(wikiLinkRe, (match, target: string, alias: string | undefined) => {
-                    if (!target.includes("/")) return match;
-                    const fileDir = file.path.substring(0, file.path.lastIndexOf("/"));
-                    const rel = this.computeRelativePath(fileDir, target);
-                    if (rel === target) return match;
-                    changed = true;
-                    return alias !== undefined ? `[[${rel}|${alias}]]` : `[[${rel}]]`;
-                });
-
-                if (changed) {
-                    await this.app.vault.modify(file, newContent);
-                    modified++;
-                }
-            } catch (err) {
-                errors.push({ file: file.path, message: String(err) });
-            }
-        }
-
-        return { modified, errors };
-    }
-
-    private computeRelativePath(fromDir: string, targetPath: string): string {
-        const fromParts = fromDir.split("/");
-        const targetParts = targetPath.split("/");
-        let common = 0;
-        while (common < fromParts.length && common < targetParts.length && fromParts[common] === targetParts[common]) {
-            common++;
-        }
-        const upCount = fromParts.length - common;
-        const rest = targetParts.slice(common);
-        if (upCount === 0) return "./" + rest.join("/");
-        return "../".repeat(upCount) + rest.join("/");
     }
 
     /**
