@@ -290,11 +290,9 @@ function appendLinkListEntry(content, key, entry) {
     return lines.join("\n");
 }
 
-/** 档案页课程索引链接：一对一「第 N 课 - date」/ 班课「📖 Lesson N - date」 */
+/** 档案页课程索引链接：统一使用「📖 Lesson N - date」格式 */
 function buildIndexLink(kind, folderName, lessonNumber, dateStr) {
-    const label = kind === "class"
-        ? "📖 Lesson " + lessonNumber + " - " + dateStr
-        : "第 " + lessonNumber + " 课 - " + dateStr;
+    const label = "📖 Lesson " + lessonNumber + " - " + dateStr;
     return "- [[" + "./" + folderName + "/" + folderName + "|" + label + "]]";
 }
 
@@ -307,7 +305,7 @@ function insertNewCourseTypeBlock(content, courseType, link) {
     const lastDiv = section.lastIndexOf("---");
     if (lastDiv === -1) return content;
     const insertPos = indexPos + lastDiv + 3;
-    const block = "\n\n### 🏷️ " + courseType + "\n" + link + "\n\n---\n";
+    const block = "\n\n### 🏷️ " + courseType + "\n" + link + "\n";
     return content.substring(0, insertPos) + block + content.substring(insertPos);
 }
 
