@@ -304,9 +304,15 @@ function insertNewCourseTypeBlock(content, courseType, link) {
     const section = content.substring(indexPos, sectionEnd);
     const lastDiv = section.lastIndexOf("---");
     if (lastDiv === -1) return content;
-    const insertPos = indexPos + lastDiv + 3;
-    const block = "\n\n### 🏷️ " + courseType + "\n" + link + "\n";
-    return content.substring(0, insertPos) + block + content.substring(insertPos);
+    
+    // 删除原有的 --- 并清理多余空行
+    const beforeDiv = content.substring(0, indexPos + lastDiv);
+    const afterDiv = content.substring(indexPos + lastDiv + 3);
+    const cleanedBefore = beforeDiv.replace(/\n\s*\n$/, '\n');
+    
+    // 插入新课型块（带 ---）
+    const block = "\n\n### 🏷️ " + courseType + "\n" + link + "\n\n---\n";
+    return cleanedBefore + block + afterDiv;
 }
 
 async function updateArchiveFrontmatter(archiveFile, partialFm) {
