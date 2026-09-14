@@ -152,6 +152,16 @@ export class XdfBaseExtension {
                                 .onClick(() => this.relocateArchive(folder, page, 'active'));
                         });
                     }
+
+                    // 授课布局：课次文件夹或课次 Nav 文件
+                    const lessonMatch = folder.name.match(/^(.+)\s+Lesson\s+(\d+)$/i);
+                    if (lessonMatch) {
+                        menu.addItem(item => {
+                            item.setTitle('授课布局')
+                                .setIcon('layout')
+                                .onClick(() => this.openTeachingLayout(folder, lessonMatch[1], Number(lessonMatch[2])));
+                        });
+                    }
                 })
             );
         } catch (err) {
@@ -208,6 +218,53 @@ export class XdfBaseExtension {
         } catch (err) {
             console.error("[XDF-Base] " + actionLabel + "失败:", err);
             new Notice("❌ " + actionLabel + "失败：" + err);
+        }
+    }
+
+    /**
+     * 授课布局：主窗口打开 Feedback，弹出窗口并排打开 Wordlist 和 Note。
+     */
+    private async openTeachingLayout(
+        folder: TFolder,
+        archiveName: string,
+        lessonNum: number,
+    ): Promise<void> {
+        const folderPath = folder.path;
+        const feedbackPath = folderPath + "/Feedback " + lessonNum + ".md";
+        const wordlistPath = folderPath + "/Wordlist " + lessonNum + ".md";
+        const notePath = folderPath + "/Note " + lessonNum + ".md";
+
+        const feedbackFile = this.app.vault.getAbstractFileByPath(feedbackPath);
+        const wordlistFile = this.app.vault.getAbstractFileByPath(wordlistPath);
+        const noteFile = this.app.vault.getAbstractFileByPath(notePath);
+
+        try {
+            // 1. 主窗口打开 Feedback
+            if (feedbackFile instanceof TFile) {
+                const mainLeaf = this.app.workspace.getLeaf(false);
+                await mainLeaf.openFile(feedbackFile);
+            }
+
+            // 2. 弹出窗口打开 Wordlist
+            if (wordlistFile instanceof TFile) {
+                const popoutLeaf = this.app.workspace.openPopoutLeaf();
+                await popoutLeaf.openFile(wordlistFile);
+
+                // 3. 在弹出窗口里垂直 split 打开 Note
+                if (noteFile instanceof TFile) {
+                    const noteLeaf = this.app.workspace.createLeafBySplit(popoutLeaf, 'vertical');
+                    await noteLeaf.openFile(noteFile);
+                }
+            } else if (noteFile instanceof TFile) {
+                // Wordlist 不存在但 Note 存在：弹出窗口只开 Note
+                const popoutLeaf = this.app.workspace.openPopoutLeaf();
+                await popoutLeaf.openFile(noteFile);
+            }
+
+            new Notice("✅ 授课布局已打开：" + folder.name);
+        } catch (err) {
+            console.error("[XDF-Base] 授课布局失败:", err);
+            new Notice("❌ 授课布局失败：" + err);
         }
     }
 

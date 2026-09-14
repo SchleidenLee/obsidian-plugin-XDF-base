@@ -14,7 +14,7 @@
  * 落后 md 最多约 2.5s（500ms debounce + 2s 节流），最终一致。
  */
 
-import { TFile, type App } from "obsidian";
+import { TFile, TAbstractFile, type App } from "obsidian";
 import { DBConnection } from "./Connection";
 import { DBWriter, type FileSnapshot } from "./Builder";
 import { detectKind, parseFrontmatterBlock } from "./Parser";
@@ -90,24 +90,25 @@ export class DBSync {
     // ========== 事件处理 ==========
 
     /** 系统目录与非登记扩展名不进同步（与 collectVaultFiles 的过滤一致） */
-    private shouldTrack(file: TFile): boolean {
+    private shouldTrack(file: TAbstractFile): boolean {
+        if (!(file instanceof TFile)) return false;
         if (!this.enabled) return false;
         if (file.path.split("/").some(seg => [".obsidian", ".trash", ".xdf"].includes(seg))) return false;
         if (["tmp", "log", "crdownload", "part"].includes(file.extension.toLowerCase())) return false;
         return true;
     }
 
-    private handleEvent = (file: TFile) => {
+    private handleEvent = (file: TAbstractFile) => {
         if (!this.shouldTrack(file)) return;
         this.enqueue({ type: "modify", path: file.path, timestamp: Date.now() });
     };
 
-    private handleDelete = (file: TFile) => {
+    private handleDelete = (file: TAbstractFile) => {
         if (!this.shouldTrack(file)) return;
         this.enqueue({ type: "delete", path: file.path, timestamp: Date.now() });
     };
 
-    private handleRename = (file: TFile, oldPath: string) => {
+    private handleRename = (file: TAbstractFile, oldPath: string) => {
         if (!this.shouldTrack(file)) return;
         this.enqueue({
             type: "rename", path: file.path, oldPath, timestamp: Date.now(),
