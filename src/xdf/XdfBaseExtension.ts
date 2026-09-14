@@ -112,32 +112,52 @@ export class XdfBaseExtension {
         try {
             this.plugin.registerEvent(
                 this.app.workspace.on('file-menu', (menu, file) => {
-                    let archiveFile: TFile | null = null;
-                    let archiveFolder: TFolder | null = null;
+                    let targetFile: TFile | null = null;
+                    let targetFolder: TFolder | null = null;
 
                     if (file instanceof TFolder) {
                         const candidate = file.children.find(
                             c => c instanceof TFile && c.basename === file.name
                         ) as TFile | undefined;
                         if (candidate) {
-                            archiveFile = candidate;
-                            archiveFolder = file;
+                            targetFile = candidate;
+                            targetFolder = file;
+                        } else {
+                            // 文件夹里没有同名文件，直接用文件夹
+                            targetFolder = file;
                         }
                     } else if (file instanceof TFile) {
-                        archiveFile = file;
-                        archiveFolder = file.parent;
+                        targetFile = file;
+                        targetFolder = file.parent;
                     }
 
-                    if (!archiveFile || !archiveFolder) return;
+                    if (!targetFolder) return;
 
-                    const cache = this.app.metadataCache.getFileCache(archiveFile);
+                    // 读 frontmatter（授课布局和归档/恢复共用）
+                    if (!targetFile) return;
+                    const cache = this.app.metadataCache.getFileCache(targetFile);
                     const fm = cache?.frontmatter;
                     const tags: string[] = fm?.tags || [];
+
+                    // 授课布局：需要 #课程记录 标签
+                    if (tags.includes('#课程记录')) {
+                        const lessonNum = Number(fm?.lesson_number);
+                        const archiveName = String(fm?.archive_name || targetFolder.name);
+                        if (lessonNum > 0) {
+                            menu.addItem(item => {
+                                item.setTitle('授课布局')
+                                    .setIcon('layout')
+                                    .onClick(() => this.openTeachingLayout(targetFolder!, archiveName, lessonNum));
+                            });
+                        }
+                    }
+
+                    // 归档/恢复：需要 #档案 标签
                     if (!tags.includes('#档案')) return;
 
                     const status = fm?.status;
-                    const folder = archiveFolder;
-                    const page = archiveFile;
+                    const folder = targetFolder;
+                    const page = targetFile;
 
                     if (status === 'active') {
                         menu.addItem(item => {
@@ -150,16 +170,6 @@ export class XdfBaseExtension {
                             item.setTitle('恢复此课程')
                                 .setIcon('undo')
                                 .onClick(() => this.relocateArchive(folder, page, 'active'));
-                        });
-                    }
-
-                    // 授课布局：课次文件夹或课次 Nav 文件
-                    const lessonMatch = folder.name.match(/^(.+)\s+Lesson\s+(\d+)$/i);
-                    if (lessonMatch) {
-                        menu.addItem(item => {
-                            item.setTitle('授课布局')
-                                .setIcon('layout')
-                                .onClick(() => this.openTeachingLayout(folder, lessonMatch[1], Number(lessonMatch[2])));
                         });
                     }
                 })
