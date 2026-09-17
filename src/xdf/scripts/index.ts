@@ -15,6 +15,9 @@ import { LESSON_CLASS_RECORD_SCRIPT } from "./lesson-class-record";
 import { HOMEWORK_AI_SCRIPT } from "./homework-ai";
 import { WORDLIST_AI_SCRIPT } from "./wordlist-ai";
 import { ARCHIVE_UTILS_SCRIPT } from "./archive-utils";
+import { MEETING_SETUP_SCRIPT } from "./meeting-setup";
+import { MEETING_RECORD_SCRIPT } from "./meeting-record";
+import { MEETING_ADD_PAGE_SCRIPT } from "./meeting-add-page";
 
 /**
  * 脚本清单
@@ -30,7 +33,7 @@ export interface PresetScript {
     displayName: string;
     path: string;
     content: string;
-    category: "建档" | "每课记录" | "AI" | "工具";
+    category: "建档" | "每课记录" | "AI" | "工具" | "行政";
 }
 
 export const PRESET_SCRIPTS: PresetScript[] = [
@@ -82,5 +85,26 @@ export const PRESET_SCRIPTS: PresetScript[] = [
         path: "scripts/WordListAI.js",
         content: WORDLIST_AI_SCRIPT,
         category: "AI"
+    },
+    {
+        id: "meeting-setup",
+        displayName: "XDF: 周例会建档",
+        path: "scripts/周例会建档.js",
+        content: MEETING_SETUP_SCRIPT,
+        category: "行政"
+    },
+    {
+        id: "meeting-record",
+        displayName: "XDF: 周例会记录",
+        path: "scripts/周例会记录.js",
+        content: MEETING_RECORD_SCRIPT,
+        category: "行政"
+    },
+    {
+        id: "meeting-add-page",
+        displayName: "XDF: 例会添加页面",
+        path: "scripts/例会添加页面.js",
+        content: MEETING_ADD_PAGE_SCRIPT,
+        category: "行政"
     }
 ];

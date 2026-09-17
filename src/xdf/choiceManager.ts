@@ -38,6 +38,11 @@ export const PRESET_FOLDERS: PresetFolder[] = [
         id: "xdf-base-folder-gen",
         name: "文件生成",
         scriptIds: ["wordlist-ai", "homework-ai"]
+    },
+    {
+        id: "xdf-base-folder-admin",
+        name: "行政工作",
+        scriptIds: ["meeting-setup", "meeting-record", "meeting-add-page"]
     }
 ];
 
