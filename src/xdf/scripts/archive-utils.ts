@@ -428,6 +428,8 @@ async function resolveArchiveInFolder(folderPath) {
 }
 
 function getNextLessonNumber(folderPath) {
+    // 双源取最大值：文件扫描为主（即时一致），DB（lessons 表）兜底补漏；
+    // 防 DB 同步滞后导致课号重复，故取两者较大者。
     const pattern = /Lesson\s*(\d+)/i;
     let max = 0;
     const subFolders = app.vault.getAllLoadedFiles()
@@ -438,6 +440,16 @@ function getNextLessonNumber(folderPath) {
         if (m) {
             const n = parseInt(m[1], 10);
             if (n > max) max = n;
+        }
+    }
+    const db = getDbApi();
+    if (db) {
+        const rows = queryDb(db,
+            "SELECT MAX(lesson_number) AS m FROM lessons WHERE folder_path LIKE ?",
+            [folderPath + "/%"]);
+        if (rows && rows.length && rows[0].m != null) {
+            const dbMax = parseInt(rows[0].m, 10);
+            if (!isNaN(dbMax) && dbMax > max) max = dbMax;
         }
     }
     return max + 1;
@@ -471,6 +483,81 @@ function fileHasTags(file, requiredTags) {
     const flat = cache.frontmatter.tag || "";
     const all = [].concat(fmTags).concat(flat ? [flat] : []);
     return requiredTags.every(function (tag) { return hasTag(all, tag); });
+}
+
+// ========== 数据库（api.db，失败自动回退文件解析） ==========
+
+function getDbApi() {
+    try {
+        const plugins = app.plugins.plugins;
+        const p = plugins["xdf-base"] || plugins.quickadd;
+        const db = p && p.api && p.api.db;
+        if (!db) return null;
+        const st = db.status();
+        if (!st || !st.isOpen) return null;
+        return db;
+    } catch (e) {
+        return null;
+    }
+}
+
+function queryDb(db, sql, params) {
+    try {
+        return db.query(sql, params || []);
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * 读档案元数据：DB（archives 表）优先，查不到回退手写 YAML 解析。
+ * 返回结构与 parseFrontmatter 一致 { meta, tags, courseTypes }（无 raw）。
+ * 注意：仅用于「读取场景」；写路径（updateArchiveFrontmatter）仍需 parseFrontmatter 读原文。
+ */
+function parseArchiveMeta(file, content) {
+    const db = getDbApi();
+    if (db && file && file.path) {
+        const rows = queryDb(db,
+            "SELECT kind, subject, schedule_type, status, starting_date, last_date, total_lessons, student_count, course_types FROM archives WHERE vault_path = ?",
+            [file.path]);
+        if (rows && rows.length) {
+            const r = rows[0];
+            let courseTypes = [];
+            try { courseTypes = JSON.parse(r.course_types || "[]"); } catch (e) { /* 保持空数组 */ }
+            const kindTag = r.kind === "class" ? TAGS.CLASS : TAGS.VIP;
+            return {
+                meta: {
+                    subject: r.subject || "",
+                    schedule_type: r.schedule_type || "",
+                    status: r.status || "",
+                    starting_date: r.starting_date,
+                    last_date: r.last_date,
+                    total_lessons: r.total_lessons,
+                    student_count: r.student_count
+                },
+                tags: [TAGS.ARCHIVE, kindTag],
+                courseTypes: courseTypes,
+                raw: ""
+            };
+        }
+    }
+    return parseFrontmatter(content);
+}
+
+/**
+ * 读班课学员名单：DB（class_roster 表）优先，查不到回退手写表格解析。
+ */
+function parseStudentsFromArchive(file, content) {
+    const db = getDbApi();
+    if (db && file && file.path) {
+        const rows = queryDb(db,
+            "SELECT student_name FROM class_roster WHERE archive_id = (SELECT id FROM archives WHERE vault_path = ?) ORDER BY row_order",
+            [file.path]);
+        if (rows && rows.length) {
+            return rows.map(function (r) { return { name: r.student_name }; });
+        }
+    }
+    return parseStudentsFromTable(content);
 }
 
 // ========== 选择器 ==========
@@ -1020,6 +1107,10 @@ module.exports = {
     getNextLessonNumber,
     parseStudentsFromTable,
     fileHasTags,
+    getDbApi,
+    queryDb,
+    parseArchiveMeta,
+    parseStudentsFromArchive,
     pickTimeSlot,
     pickScheduleType,
     pickCourseType,

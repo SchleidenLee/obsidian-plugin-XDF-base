@@ -15,7 +15,7 @@ export const LESSON_CLASS_RECORD_SCRIPT = String.raw`module.exports = async () =
         const picked = await U.pickArchiveByKind("class", "请选择班级档案");
         if (!picked) return;
 
-        const parsed = U.parseFrontmatter(picked.content);
+        const parsed = U.parseArchiveMeta(picked.file, picked.content);
         const subject = parsed.meta.subject || null;
         const courseType = U.lastCourseType(parsed, "班课");
         const scheduleType = parsed.meta.schedule_type || "full-time";
@@ -23,7 +23,7 @@ export const LESSON_CLASS_RECORD_SCRIPT = String.raw`module.exports = async () =
         const parentFolder = picked.file.parent.path;
         const lessonNumber = U.getNextLessonNumber(parentFolder);
         const needSendFeedback = scheduleType === "weekend" || lessonNumber % 2 === 0;
-        const students = U.parseStudentsFromTable(picked.content);
+        const students = U.parseStudentsFromArchive(picked.file, picked.content);
 
         const pkg = await U.writeLessonPackage({
             kind: "class",

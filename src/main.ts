@@ -106,11 +106,18 @@ export default class QuickAdd extends Plugin {
 	}, SETTINGS_SAVE_DEBOUNCE_MS);
 
 	get api(): ReturnType<typeof QuickAddApi.GetApi> {
-		return QuickAddApi.GetApi(
+		const api = QuickAddApi.GetApi(
 			this.app,
 			this,
 			new ChoiceExecutor(this.app, this),
 		);
+		// 挂载 xdf 数据库入口（v1.0.0 契约：api.db.query/exec/rebuild/status）。
+		// 懒 getter：XdfBaseExtension 在 onload 末尾才初始化，访问时再解析。
+		Object.defineProperty(api, "db", {
+			enumerable: true,
+			get: () => (this as any)._xdfBase?.getDBApi?.() ?? null,
+		});
+		return api;
 	}
 
 	async onload() {

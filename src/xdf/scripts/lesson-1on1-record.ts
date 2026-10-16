@@ -15,7 +15,7 @@ export const LESSON_1ON1_RECORD_SCRIPT = String.raw`module.exports = async () =>
         const picked = await U.pickArchiveByKind("vip", "请选择学员档案");
         if (!picked) return;
 
-        const parsed = U.parseFrontmatter(picked.content);
+        const parsed = U.parseArchiveMeta(picked.file, picked.content);
         const subject = parsed.meta.subject || null;
         const pickedType = await U.pickCourseTypeWithDefault(U.lastCourseType(parsed));
         const time = await U.pickLessonTime(U.LESSON_TIME_SLOTS);
