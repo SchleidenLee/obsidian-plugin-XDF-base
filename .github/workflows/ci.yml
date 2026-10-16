@@ -5,9 +5,9 @@ on:
     # required status checks without deadlocking docs-only / markdown-only PRs
     # (a required check that never runs stays pending forever and blocks merge).
     push:
-        branches: [master]
+        branches: [main]
     pull_request:
-        branches: [master]
+        branches: [main]
     workflow_dispatch:
 
 concurrency:

@@ -5,7 +5,7 @@ name: Dependency Review
 # left docs dependency bumps unreviewed.
 on:
     pull_request:
-        branches: [master]
+        branches: [main]
 
 concurrency:
     group: dep-review-${{ github.workflow }}-${{ github.ref }}
