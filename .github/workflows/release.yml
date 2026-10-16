@@ -1,53 +1,66 @@
-# Caller stub: release (stage 3) for quickadd (pnpm, ships styles.css).
-#
-# workflow_dispatch is the only trigger: the reusable validate workflow (stage 2)
-# dispatches this on the durable release-run/<version> recovery branch. Keeping a
-# plain workflow_dispatch here also makes the release itself replayable for
-# recovery without re-running the whole pipeline.
-
 name: Release
 
 on:
-    workflow_dispatch:
-        inputs:
-            releasePr:
-                description: "Merged machine-generated release PR number to recover"
-                required: true
-                type: string
+  push:
+    tags:
+      - 'v*'
 
-permissions: {}
-
-concurrency:
-    group: release
-    cancel-in-progress: false
+permissions:
+  contents: write
 
 jobs:
-    release:
-        permissions:
-            actions: read
-            attestations: write
-            contents: write
-            id-token: write
-            pull-requests: read
-        uses: chhoumann/obsidian-plugin-workflows/.github/workflows/release.yml@v4
+  release:
+    runs-on: ubuntu-latest
+    env:
+      ARTIFACT_DIR: dist
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # base 的 package.json 声明了 packageManager: pnpm@10.32.1，
+      # 因此不传 version，由 action-setup 读取 packageManager 决定 pnpm 版本。
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
-            release-pr: ${{ inputs.releasePr }}
-            plugin-name: quickadd
-            package-manager: pnpm
-            # Must match the release-policy pinned in release-prepare.yml.
-            release-policy: '[{"scope":"deps","type":"build","release":"patch"}]'
-            default-branch: master
-            node-version: "24"
-            release-bot-app-slug: quickadd-release-bot
-            release-assets: '["main.js","manifest.json","styles.css"]'
-            verify-commands: |
-                pnpm run lint
-                pnpm run check
-                pnpm run test
-            notify-name: QuickAdd
-        secrets:
-            # Optional: unset secrets resolve to '' and the notify job skips them.
-            # QuickAdd has DISCORD_WEBHOOK today; SLACK_WEBHOOK is wired for parity
-            # and simply skips until the secret is set.
-            slack-webhook: ${{ secrets.SLACK_WEBHOOK }}
-            discord-webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate version
+        id: version
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          MAN=$(node -p "require('./manifest.json').version")
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+          if [ "$PKG" != "$MAN" ] || [ "$PKG" != "$TAG" ]; then
+            echo "::error::版本号必须一致：package.json=$PKG manifest.json=$MAN tag=$TAG"
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Verify release assets
+        run: |
+          for f in main.js manifest.json styles.css; do
+            if [ ! -f "$ARTIFACT_DIR/$f" ]; then
+              echo "::error::缺少发布产物 $ARTIFACT_DIR/$f"
+              exit 1
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            ${{ env.ARTIFACT_DIR }}/main.js
+            ${{ env.ARTIFACT_DIR }}/manifest.json
+            ${{ env.ARTIFACT_DIR }}/styles.css
