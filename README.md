@@ -8,7 +8,7 @@ XDF 教学系统核心 Obsidian 插件：在 [QuickAdd](https://github.com/chhou
 
 ### 1. 预设脚本自动释放
 
-每次插件启动时，把内置脚本（建档、每课记录、AI 出题等）**全量释放**到 vault 的 `00.SYSTEM/xdf_base/` 目录：
+每次插件启动时，把内置脚本（建档、每课记录、AI 出题、行政等）**全量释放**到 vault 的 `00.SYSTEM/xdf_base/` 目录：
 
 - 脚本升级随插件更新自动送达，无需手动同步
 - 缺失自动补回（自愈）
@@ -42,7 +42,7 @@ XDF 教学系统核心 Obsidian 插件：在 [QuickAdd](https://github.com/chhou
 - **增量同步**：文件变更 500ms debounce + 2s 节流，只重写受影响文件的行；上课连续记笔记不打扰
 - **启动自愈**：空库自动全量重建；旧库按 mtime 对账补漏（外部改动文件不丢）
 - **最终一致**：md 是唯一数据源，数据库落后最多约 2.5 秒；同步失败写入 `00.SYSTEM/Logs/ai-log.md`
-- **查询入口**：`app.plugins.plugins["xdf-base"].api.db.query(sql)`（只读推荐走 MCP 拷贝副本）
+- **查询入口**：`app.plugins.plugins["xdf-base"].api.db.query(sql, params)`（插件内部模块亦可 `import { getXdfBaseInstance }`；只读推荐走 MCP 拷贝副本）
 
 ### 6. Feedback 内联 checkbox 组
 
