@@ -12,7 +12,7 @@
  */
 
 import { TFile, type App } from "obsidian";
-import { PRESET_SCRIPTS, type PresetScript } from "./index";
+import { PRESET_SCRIPTS } from "./index";
 
 const SYSTEM_DIR = "00.SYSTEM/xdf_base";
 
