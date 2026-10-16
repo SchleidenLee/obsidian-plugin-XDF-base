@@ -19,6 +19,9 @@ dist/
 # obsidian
 data.json
 
+# 参考目录（上游源码/旧版手工脚本），不入库
+references/
+
 **/*.map
 src/**/*.js
 
