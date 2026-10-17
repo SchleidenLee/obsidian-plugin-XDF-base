@@ -5,6 +5,11 @@
 
 ---
 
+## 2026-10-17 · 清理历史裸 tag `1.4.9`
+
+- 删除裸 tag `1.4.9` 及其 Release（非流水线产物，属旧 `tag-version-prefix: ""` 时代的遗留），仓库 tag 自此全部为 `v*`。
+- **为什么**：流水线只由 `v*` 触发，裸 tag 不触发构建；且非 `v` 前缀会搅乱「取最新 tag」类脚本的排序（`git describe --abbrev=0` 曾返回 `1.4.9` 导致误判）。
+
 ## 2026-10-17 · 接上 `api.db` + 内置脚本改走数据库
 
 - `main.ts get api()` 以懒 getter 挂载 `db`（委托 `_xdfBase.getDBApi()`），把 v1.0.0 起只有注释契约、从未实现的 `api.db` 真正接上；toolkits 的 `api.db` 兼容分支自此可命中。
