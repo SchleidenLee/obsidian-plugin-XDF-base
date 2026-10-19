@@ -52,11 +52,11 @@
 	},
 	"dependencies": {
 		"@popperjs/core": "^2.11.8",
-		"chrono-node": "^2.10.1",
+		"chrono-node": "^2.10.3",
 		"fuse.js": "7",
 		"obsidian-dataview": "^0.5.68",
-		"sql.js": "^1.10.3",
-		"svelte-dnd-action": "0.9.78",
+		"sql.js": "^1.15.0",
+		"svelte-dnd-action": "0.9.80",
 		"three-way-merge": "^0.1.0",
 		"uuid": "14",
 		"zustand": "^5.0.15"
