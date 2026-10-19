@@ -2227,6 +2227,88 @@ body:not(.is-mobile)
 	cursor: grabbing;
 }
 
+/* ========== XDF 脚本运行面板 ========== */
+
+.xdf-panel-root {
+	padding: 0 12px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	height: 100%;
+}
+
+.xdf-panel-title {
+	margin: 8px 0 0;
+	font-size: var(--font-ui-medium, 15px);
+	font-weight: 600;
+}
+
+.xdf-panel-head {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.xdf-panel-select {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.xdf-panel-refresh {
+	flex: 0 0 auto;
+}
+
+.xdf-panel-form {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.xdf-panel-field {
+	padding: 4px 0;
+}
+
+.xdf-panel-field .setting-item-control {
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.xdf-panel-field textarea {
+	width: 100%;
+	min-height: 60px;
+}
+
+.xdf-panel-empty {
+	padding: 12px 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small, 13px);
+}
+
+.xdf-panel-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
+.xdf-panel-run {
+	min-width: 88px;
+}
+
+.xdf-panel-status {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 6px;
+	font-size: var(--font-ui-smaller, 12px);
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.xdf-panel-status-line {
+	padding: 2px 0;
+}
+
 #dnd-action-dragged-el.qa-drag-clone .qa-drag-pill-label {
 	overflow: hidden;
 	text-overflow: ellipsis;

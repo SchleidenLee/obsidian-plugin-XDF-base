@@ -20,6 +20,7 @@ import { appendDbLog } from "./db/DbLog";
 import { ScriptReleaser } from "./scripts/ScriptReleaser";
 import { syncPresetChoices } from "./choiceManager";
 import { registerInlineGroupRendering } from "./InlineGroup";
+import { registerScriptPanel } from "./panel";
 
 export interface RebuildSummary {
     fileCount: number;
@@ -50,11 +51,20 @@ export class XdfBaseExtension {
         // 0. 把自己注册到全局单例，供 settings tab 等模块访问
         setXdfBaseInstance(this);
 
+        // 0.1 注册脚本运行面板
+        //      必须在此处同步完成 registerView：其后的第一个 await 会让出控制权，
+        //      而 registerView 只能在 onload 期间同步调用。
+        try {
+            registerScriptPanel(this.app, this.plugin);
+        } catch (err) {
+            console.error("[XDF-Base] 脚本面板注册失败:", err);
+        }
+
         // 1. 释放预设脚本
         try {
             const releaser = new ScriptReleaser(this.app);
             const releaseReport = await releaser.releaseAll();
-            console.log(`[XDF-Base] 脚本释放完成：新建 ${releaseReport.created.length}，覆盖 ${releaseReport.updated.length}，失败 ${releaseReport.failed.length}`);
+            console.log(`[XDF-Base] 脚本释放完成：新建 ${releaseReport.created.length}，覆盖 ${releaseReport.updated.length}，清理旧版 ${releaseReport.removed.length}，失败 ${releaseReport.failed.length}`);
         } catch (err) {
             console.error("[XDF-Base] 脚本释放失败:", err);
             new Notice("❌ XDF-Base 脚本释放失败：" + err);

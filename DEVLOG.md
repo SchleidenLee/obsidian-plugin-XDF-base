@@ -5,6 +5,49 @@
 
 ---
 
+## 2026-10-20 · 脚本按目录分组，源码/释放/面板/QuickAdd 四处统一中文命名
+
+- 源码目录重构：`src/xdf/scripts/` 下按既有三组 + 通用组落盘（`档案管理/` `文件生成/` `行政工作/` `通用/`），共享资产移到 `lib/`（ArchiveUtils）与 `runtime/`（XdfRuntime）。11 个两段式脚本由 `panel-<kebab>.ts` 改名为 `<中文名>.ts`；9 个旧扁平预设脚本源码删除（备份在 `XDF-obsidian-system/_backup/20261019-script-migration/`）。
+- [scripts/index.ts](./src/xdf/scripts/index.ts)：`SCRIPTS` 每条只登记 `"<分组>/<中文名>.js"` 路径，`defineScript()` 从路径推导 `id`（= 文件名）与 `group`（= 第一段目录）；`GROUP_ORDER` 只定顺序，新增 `groupScripts()` 归并。
+- [scripts/ScriptReleaser.ts](./src/xdf/scripts/ScriptReleaser.ts)：释放到 `scripts/<分组>/<中文名>.js`；新增 `LEGACY_PATHS` / `LEGACY_DIRS` 与 `pruneLegacy()`，一次性删除旧扁平脚本与 `panel-scripts/`（非递归 rmdir，目录里还有用户脚本则保留）。
+- [choiceManager.ts](./src/xdf/choiceManager.ts)：删除 `PRESET_FOLDERS` / `PANEL_FOLDER`，改为按 `groupScripts()` 动态生成 `xdf-group-<分组>` 文件夹与 `xdf-script-<中文名>` Choice；`xdf-base-*` / `xdf-panel-*` 与消失分组统一清理。
+- [panel/XdfScriptPanelView.ts](./src/xdf/panel/XdfScriptPanelView.ts)：递归扫 `scripts/**/*.js`，`category` 取相对路径第一段，按 `GROUP_ORDER` 排序。
+- **为什么**：分组此前硬编码在 `choiceManager` 的清单里，增删脚本要改两处且分组与目录脱节；用户要求分组沿用现有三组、由 `src/xdf/scripts/` 的文件夹识别，并让源码名 / 释放名 / 面板 id / QuickAdd 菜单名统一为同一中文。新脚本已全量验证可用，旧扁平实现不再保留。
+
+---
+
+## 2026-10-19 · 面板脚本注册进 QuickAdd（独立分组）
+
+- [choiceManager.ts](./src/xdf/choiceManager.ts) 新增 `PANEL_FOLDER`（id `xdf-base-folder-panel`，名「面板脚本」）与 `panelToChoice()`：把 `PANEL_SCRIPTS` 的 11 个脚本注册为 QuickAdd Macro Choice，choice id `xdf-panel-<id>`、macro id `xdf-panel-macro-<id>`，UserScript 指向 `00.SYSTEM/xdf_base/panel-scripts/<kebab>.js`。
+- 同步逻辑从「只遍历 `PRESET_FOLDERS`」改为遍历 `ALL_PRESET_FOLDERS`（原三组 + 面板组），散落项清理同时覆盖 `xdf-base-*` 与 `xdf-panel-*`。
+- **为什么**：原脚本有「启动时注册 QuickAdd 菜单」这一步，复刻的面板脚本只释放文件、没有注册，导致 QuickAdd 侧看不到；按用户要求另起一组，避免与原脚本条目混在一起或 id 冲突。
+
+---
+
+## 2026-10-19 · 按两段式规范复刻 9 个预设脚本
+
+- 新增 9 个面板脚本（`panel-archive-1on1-create` / `panel-archive-class-create` / `panel-lesson-1on1-record` / `panel-lesson-class-record` / `panel-homework-ai` / `panel-wordlist-ai` / `panel-meeting-setup` / `panel-meeting-record` / `panel-meeting-add-page`），业务逻辑逐一对照原脚本复刻，`PANEL_SCRIPTS` 由 3 项扩到 11 项。**原 10 个预设脚本与 `ArchiveUtils` 一字未动**。
+- 删除 `panel-lesson-package.ts`（一对一与班课揉在一个脚本里属假共享，已拆成两个独立复刻版）。
+- 规范细则沉淀进 [ARCHITECTURE.md](./ARCHITECTURE.md)「约定 → 两段式脚本规范（细则）」：骨架、ctx 契约、字段类型映射、复刻十条原则、验证方式。
+- **为什么**：原脚本参数全靠逐项弹窗，不直观、不能回退；按同一份 `collect` / `execute` 复刻后，两份脚本可在面板里一次填表、反复重跑，QuickAdd 侧仍可经 `entry` 顺跑，且原脚本保持可用以对照回滚。规范先行是为了让后续复刻有统一验收标准（逐行等价、输入搬 collect、写盘只在 execute）。
+
+---
+
+## 2026-10-19 · 面板脚本双入口（QuickAdd 顺跑 + 面板两段式）
+
+- 新增共享运行时 [xdf-runtime.ts](./src/xdf/scripts/xdf-runtime.ts)（释放为 `utils/XdfRuntime.js`）与 `RUNTIME_SCRIPTS` 清单（并入 `ScriptReleaser.ALL_SCRIPTS`）：`run(mod)` 造 native ctx（`ask` 经 `api.suggester / inputPrompt / wideInputPrompt / datePrompt`）顺序跑 `collect → execute`。
+- 3 个面板脚本改为 `const MOD = { meta, collect, execute }; MOD.entry = ...; module.exports = MOD`：`entry` 载入运行时即可在 QuickAdd 里顺跑；`collect` / `execute` 逻辑一字未改，**现有 10 个预设脚本与 `ArchiveUtils` 均未改动**。
+- 规范并入 [ARCHITECTURE.md](./ARCHITECTURE.md)「约定」：新增「双入口（可选）」条，脚本清单由两清单扩为三清单。
+- **为什么**：面板脚本此前只能在面板跑，无法用 QuickAdd 快捷方式触发。研究 QuickAdd 求值实证后确认：脚本导出对象含 `entry` 即会被直接调用（不弹成员选择器），而调用签名 `(params, settings)` 不含 ctx——故挂一个 `entry` 自造 native ctx 复用同一份 `collect` / `execute`，比给两边各写一套脚本更贴近既有结构。字段定义与业务逻辑各只写一份，两条路只差 asker 实现（面板=一张表单，QuickAdd=逐项弹窗）。
+
+## 2026-10-19 · 脚本运行面板 + 两段式脚本规范
+
+- 新增 `src/xdf/runner/`（`types` / `ScriptModuleLoader` / `ScriptRunner` / `AnswerStore`）与 `src/xdf/panel/`（`index` / `XdfScriptPanelView` / `PanelFormRenderer`）：面板选脚本 → 跑 `collect` 生成表单 → 值变化防抖重算 → 点运行跑 `execute`，填答落 `00.SYSTEM/xdf_base/panel/answers.json`。
+- 确立**两段式脚本契约**：`module.exports = { meta?, collect, execute }`，`collect` 只读不写盘、`execute` 只写不弹窗；取输入统一经 `ctx.ask(field)`（复用 `FieldRequirement`）。规范并入 [ARCHITECTURE.md](./ARCHITECTURE.md)「约定」。
+- 新写 3 个面板脚本（登记进新增的 `PANEL_SCRIPTS`，释放到 `panel-scripts/`、不进 QuickAdd 菜单）：新建笔记 / 追加到笔记 / 生成课次包。**现有 10 个预设脚本未改动**。
+- `XdfBaseExtension.initialize()` 在首个 `await` 前同步调用 `registerScriptPanel`（`registerView` 须在 `onload` 内同步完成）。
+- **为什么**：原脚本靠弹窗逐个问参数——不直观、不能回退、中断要重填。两段式把「收集」与「执行」解耦：收集阶段纯只读、可随便重跑 / 回退 / 中断；面板只认字段描述即可通用渲染，脚本只经 `ctx` 访问宿主、不感知驱动方（面板或原生弹窗）。
+
 ## 2026-10-17 · 清理历史裸 tag `1.4.9`
 
 - 删除裸 tag `1.4.9` 及其 Release（非流水线产物，属旧 `tag-version-prefix: ""` 时代的遗留），仓库 tag 自此全部为 `v*`。
