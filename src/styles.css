@@ -2258,6 +2258,22 @@ body:not(.is-mobile)
 	flex: 0 0 auto;
 }
 
+.xdf-panel-target {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--font-ui-smaller, 12px);
+	color: var(--text-muted);
+	overflow: hidden;
+}
+
+.xdf-panel-target-path {
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .xdf-panel-form {
 	display: flex;
 	flex-direction: column;

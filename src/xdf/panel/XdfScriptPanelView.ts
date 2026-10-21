@@ -42,6 +42,7 @@ export class XdfScriptPanelView extends ItemView {
 
 	private formRenderer: PanelFormRenderer | null = null;
 	private selectEl!: HTMLSelectElement;
+	private targetEl!: HTMLElement;
 	private formEl!: HTMLElement;
 	private statusEl!: HTMLElement;
 	private runBtnEl!: HTMLButtonElement;
@@ -87,6 +88,17 @@ export class XdfScriptPanelView extends ItemView {
 		});
 		refreshBtn.addEventListener("click", () => void this.reloadScripts());
 
+		this.targetEl = root.createEl("div", { cls: "xdf-panel-target" });
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", () =>
+				this.updateActiveFile(),
+			),
+		);
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => this.updateActiveFile()),
+		);
+		this.updateActiveFile();
+
 		this.formEl = root.createEl("div", { cls: "xdf-panel-form" });
 
 		const actions = root.createEl("div", { cls: "xdf-panel-actions" });
@@ -112,6 +124,25 @@ export class XdfScriptPanelView extends ItemView {
 			this.recomputeTimer = null;
 		}
 		this.contentEl.empty();
+	}
+
+	// ========== 活跃文件状态 ==========
+
+	/** 显示脚本将要操作的目标文件（getActiveFile 即前台编辑器文件），完整路径 */
+	private updateActiveFile(): void {
+		const file = this.app.workspace.getActiveFile();
+		this.targetEl.empty();
+		if (file) {
+			this.targetEl.createSpan({ text: "📄" });
+			this.targetEl.createSpan({
+				text: file.path,
+				cls: "xdf-panel-target-path",
+			});
+			this.targetEl.setAttribute("title", file.path);
+		} else {
+			this.targetEl.setText("（无活跃笔记）");
+			this.targetEl.setAttribute("title", "");
+		}
 	}
 
 	// ========== 脚本列表 ==========
