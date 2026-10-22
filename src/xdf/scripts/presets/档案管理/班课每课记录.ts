@@ -1,21 +1,21 @@
 /**
- * 两段式脚本：一对一每课记录
- * 释放到 00.SYSTEM/xdf_base/scripts/档案管理/一对一每课记录.js
+ * 两段式脚本：班课每课记录
+ * 释放到 00.SYSTEM/xdf_base/scripts/presets/档案管理/班课每课记录.js
  *
- * 复刻 lesson-1on1-record.ts：选档案 → 课型继承 → 时间 → 7 文件包 → 档案回填。
+ * 复刻 lesson-class-record.ts：选档案 → 学员表 → 课次/课型/班型 → 时间 → 7 文件包 → 档案回填。
  * collect 只读扫描 + ctx.ask 取输入；execute 唯一写盘；entry 为 QuickAdd 入口。
  */
 
-export const PANEL_LESSON_1ON1_RECORD_SCRIPT = String.raw`/**
- * XDF 脚本 · 一对一每课记录
- * 释放路径：00.SYSTEM/xdf_base/scripts/档案管理/一对一每课记录.js
+export const PANEL_LESSON_CLASS_RECORD_SCRIPT = String.raw`/**
+ * XDF 脚本 · 班课每课记录
+ * 释放路径：00.SYSTEM/xdf_base/scripts/presets/档案管理/班课每课记录.js
  *
  * collect：只读扫描 + ctx.ask 取输入（不写盘）
  * execute：只从 params 取输入，唯一写盘处（禁止 ctx.ask / confirm）
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const UTILS_PATH = "00.SYSTEM/xdf_base/utils/ArchiveUtils.js";
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const UTILS_PATH = "00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 
 function loadUtils(ctx) {
     return ctx.app.vault.adapter.read(UTILS_PATH).then(function (code) {
@@ -49,15 +49,15 @@ function scanArchives(ctx, U, kindTag) {
 }
 
 const MOD = {
-    meta: { title: "一对一每课记录" },
+    meta: { title: "班课每课记录" },
 
     // 第一阶段：只收集，不写盘
     collect: async (ctx) => {
         const U = await loadUtils(ctx);
 
-        const candidates = scanArchives(ctx, U, U.TAGS.VIP);
+        const candidates = scanArchives(ctx, U, U.TAGS.CLASS);
         if (candidates.length === 0) {
-            ctx.notice("未找到 " + U.TAGS.VIP + " 档案，请先建档");
+            ctx.notice("未找到 " + U.TAGS.CLASS + " 档案，请先建档");
             return {};
         }
 
@@ -66,7 +66,7 @@ const MOD = {
 
         let archivePath = await ctx.ask({
             id: "archive",
-            label: "请选择学员档案",
+            label: "请选择班级档案",
             type: "suggester",
             options: paths,
             displayOptions: labels,
@@ -76,40 +76,10 @@ const MOD = {
         if (paths.indexOf(archivePath) === -1) archivePath = paths[0];
 
         const chosen = candidates.find(function (f) { return f.path === archivePath; }) || candidates[0];
-        const content = await ctx.app.vault.read(chosen);
-        const parsed = U.parseArchiveMeta(chosen, content);
-        const prevType = U.lastCourseType(parsed);
-
-        // 复刻 pickCourseTypeWithDefault：有默认课型时首项为「默认 (X)」
-        let courseType;
-        if (!prevType) {
-            courseType = await ctx.ask({
-                id: "courseType",
-                label: "请选择课程体系",
-                type: "suggester",
-                options: U.COURSE_TYPES,
-                displayOptions: U.COURSE_TYPES,
-                defaultValue: U.COURSE_TYPES[0]
-            });
-            if (!courseType && ctx.mode === "native") throw new Error("必须选择课程体系");
-            if (!courseType) courseType = U.COURSE_TYPES[0];
-        } else {
-            const otherOptions = U.COURSE_TYPES.filter(function (opt) { return opt !== prevType; });
-            const tagOptions = ["默认 (" + prevType + ")"].concat(otherOptions);
-            courseType = await ctx.ask({
-                id: "courseType",
-                label: "请选择本节课所属的课程体系",
-                type: "suggester",
-                options: tagOptions,
-                displayOptions: tagOptions,
-                defaultValue: tagOptions[0]
-            });
-            if (!courseType && ctx.mode === "native") throw new Error("未选择课程体系");
-            if (tagOptions.indexOf(courseType) === -1) courseType = tagOptions[0];
-        }
+        await ctx.app.vault.read(chosen);
 
         // 复刻 pickLessonTime：先选时间获取方式，手动时再取日期 + 时段
-        const slots = U.LESSON_TIME_SLOTS;
+        const slots = U.CLASS_TIME_SLOTS;
         let timeMode = await ctx.ask({
             id: "timeMode",
             label: "请选择课程时间获取方式",
@@ -143,29 +113,11 @@ const MOD = {
             if (!timeSlot) timeSlot = slots[0];
         }
 
-        // 复刻 writeLessonPackage 的 ensureFolderWithConfirm：只读判断，命中才追加覆盖选项
-        const parentFolder = chosen.parent.path;
-        const lessonNumber = U.getNextLessonNumber(parentFolder);
-        const folderPath = U.joinPath(parentFolder, U.buildLessonFolderName(chosen.basename, lessonNumber));
-        let overwrite = "yes";
-        if (ctx.app.vault.getAbstractFileByPath(folderPath)) {
-            overwrite = (await ctx.ask({
-                id: "overwrite",
-                label: "课程文件夹 \"" + folderPath + "\" 已存在，是否覆盖内部文件？",
-                type: "dropdown",
-                options: ["yes", "no"],
-                displayOptions: ["覆盖内部文件", "取消"],
-                defaultValue: "yes"
-            })) || "yes";
-        }
-
         return {
             archive: chosen.path,
-            courseType: courseType,
             timeMode: timeMode,
             date: lessonDate,
-            slot: timeSlot,
-            overwrite: overwrite
+            slot: timeSlot
         };
     },
 
@@ -176,8 +128,8 @@ const MOD = {
             const archivePath = String(params.archive || "");
             if (!archivePath) {
                 // 复刻 pickArchiveByKind：无候选时提示；用户主动取消则静默返回
-                if (scanArchives(ctx, U, U.TAGS.VIP).length === 0) {
-                    ctx.notice("未找到 " + U.TAGS.VIP + " 档案，请先建档");
+                if (scanArchives(ctx, U, U.TAGS.CLASS).length === 0) {
+                    ctx.notice("未找到 " + U.TAGS.CLASS + " 档案，请先建档");
                 }
                 return;
             }
@@ -188,27 +140,11 @@ const MOD = {
             const content = await ctx.app.vault.read(archiveFile);
             const parsed = U.parseArchiveMeta(archiveFile, content);
             const subject = parsed.meta.subject || null;
-            const prevType = U.lastCourseType(parsed);
-
-            // 复刻 pickCourseTypeWithDefault 的返回值：默认项继承旧课型且不算新课型
-            const selected = String(params.courseType || "");
-            let courseType;
-            let isNew;
-            if (!prevType) {
-                if (!selected) throw new Error("必须选择课程体系");
-                courseType = selected;
-                isNew = true;
-            } else if (selected === "默认 (" + prevType + ")") {
-                courseType = prevType;
-                isNew = false;
-            } else {
-                if (!selected) throw new Error("未选择课程体系");
-                courseType = selected;
-                isNew = true;
-            }
+            const courseType = U.lastCourseType(parsed, "班课");
+            const scheduleType = parsed.meta.schedule_type || "full-time";
 
             // 复刻 pickLessonTime 的返回值
-            const slots = U.LESSON_TIME_SLOTS;
+            const slots = U.CLASS_TIME_SLOTS;
             let date;
             if (!params.timeMode || params.timeMode === U.TIME_MODE_OPTIONS[0]) {
                 date = U.getNearestSlotDate(slots);
@@ -224,20 +160,11 @@ const MOD = {
 
             const parentFolder = archiveFile.parent.path;
             const lessonNumber = U.getNextLessonNumber(parentFolder);
-            const folderPath = U.joinPath(parentFolder, U.buildLessonFolderName(archiveFile.basename, lessonNumber));
-
-            // 复刻 ensureFolderWithConfirm 分支：取消 → 原「用户取消操作」；覆盖 → 先删再重建
-            const existing = ctx.app.vault.getAbstractFileByPath(folderPath);
-            if (existing) {
-                if (params.overwrite === "no") {
-                    ctx.notice("❌ 生成失败：用户取消操作");
-                    return;
-                }
-                await ctx.app.vault.delete(existing, true);
-            }
+            const needSendFeedback = scheduleType === "weekend" || lessonNumber % 2 === 0;
+            const students = U.parseStudentsFromArchive(archiveFile, content);
 
             const pkg = await U.writeLessonPackage({
-                kind: "vip",
+                kind: "class",
                 archiveName: archiveFile.basename,
                 parentFolder: parentFolder,
                 lessonNumber: lessonNumber,
@@ -246,25 +173,26 @@ const MOD = {
                 day: day,
                 courseType: courseType,
                 subject: subject,
-                needSendFeedback: true,
-                overwrite: true
+                needSendFeedback: needSendFeedback,
+                overwrite: false,
+                students: students
             });
 
             await U.updateArchiveAfterLesson({
                 archiveFile: archiveFile,
-                link: U.buildIndexLink("vip", pkg.folderName, lessonNumber, dateStr),
+                link: U.buildIndexLink("class", pkg.folderName, lessonNumber, dateStr),
                 lessonNumber: lessonNumber,
                 dateStr: dateStr,
-                isNewCourseType: isNew,
+                isNewCourseType: false,
                 courseType: courseType,
-                indexHeader: "### 🏷️ " + courseType
+                indexHeader: U.INDEX_HEADER
             });
 
-            await U.openFile(pkg.folderPath + "/" + pkg.names.nav + ".md");
-            ctx.notice("✅ 第 " + lessonNumber + " 课记录包生成成功！");
+            await U.openFile(pkg.folderPath + "/" + pkg.names.nav + ".md", true);
+            ctx.notice("✅ Lesson " + lessonNumber + " 创建完成");
         } catch (err) {
-            console.error("One-on-One Lesson Record Error:", err);
-            ctx.notice("❌ 生成失败：" + err.message);
+            ctx.notice("❌ " + err.message);
+            console.error(err);
         }
     }
 };

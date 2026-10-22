@@ -1,13 +1,13 @@
 {
 	"name": "quickadd",
-	"version": "1.4.12",
+	"version": "1.4.13",
 	"description": "Quickly add new pages or content to your vault.",
 	"main": "main.js",
 	"scripts": {
-		"dev": "node esbuild.config.mjs",
+		"dev": "node scripts/auto-manifest.mjs && node esbuild.config.mjs",
 		"lint": "eslint .",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"build-with-lint": "tsc -noEmit -skipLibCheck && pnpm lint && node esbuild.config.mjs production",
+		"build": "node scripts/auto-manifest.mjs && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"build-with-lint": "node scripts/auto-manifest.mjs && tsc -noEmit -skipLibCheck && pnpm lint && node esbuild.config.mjs production",
 		"check": "svelte-check --threshold error",
 		"obsidian:e2e": "obsidian-e2e run",
 		"provision:e2e-vault": "obsidian-e2e provision",

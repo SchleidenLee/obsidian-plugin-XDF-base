@@ -2249,9 +2249,111 @@ body:not(.is-mobile)
 	align-items: center;
 }
 
-.xdf-panel-select {
+.xdf-panel-tree {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 0 1 auto;
+	/* overflow 容器在 flex 列里自动最小尺寸按 0 算，面板矮时被整个挤掉；给保底高度 */
+	min-height: 90px;
+	max-height: 240px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s, 4px);
+	padding: 4px;
+}
+
+/* 收起态只有一行触发条：不需要保底高度与滚动上限，也不参与收缩 */
+.xdf-panel-tree.is-collapsed {
+	flex: 0 0 auto;
+	min-height: 0;
+	max-height: none;
+	padding: 2px;
+}
+
+.xdf-panel-trigger {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 8px;
+	cursor: pointer;
+	border-radius: var(--radius-s, 4px);
+	font-weight: 600;
+	font-size: var(--font-ui-small, 13px);
+	user-select: none;
+}
+
+.xdf-panel-trigger:hover {
+	background: var(--background-modifier-hover);
+}
+
+.xdf-panel-trigger-label {
 	flex: 1 1 auto;
 	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.xdf-panel-group-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	cursor: pointer;
+	border-radius: var(--radius-s, 4px);
+	user-select: none;
+	font-weight: 600;
+	font-size: var(--font-ui-small, 13px);
+}
+
+.xdf-panel-group-header:hover {
+	background: var(--background-modifier-hover);
+}
+
+.xdf-panel-group-caret {
+	display: inline-flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.xdf-panel-group-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.xdf-panel-group-count {
+	flex: 0 0 auto;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller, 12px);
+}
+
+.xdf-panel-group-items {
+	display: flex;
+	flex-direction: column;
+	padding-left: 10px;
+}
+
+.xdf-panel-item {
+	padding: 3px 8px;
+	cursor: pointer;
+	border-radius: var(--radius-s, 4px);
+	font-size: var(--font-ui-small, 13px);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.xdf-panel-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.xdf-panel-item.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
 }
 
 .xdf-panel-refresh {

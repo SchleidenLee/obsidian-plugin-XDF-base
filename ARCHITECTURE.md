@@ -13,7 +13,7 @@ Obsidian 桌面端插件，基于上游 [QuickAdd](https://github.com/chhoumann/
 ```
 src/
 ├── main.ts                    插件生命周期入口（Plugin 子类），onload 末尾装配 XdfBaseExtension
-├── settings.ts                设置模型 + 默认值（含 folderStructure 三文件夹、AI provider）
+├── settings.ts                设置模型 + 默认值（含 folderStructure 三文件夹、AI provider、xdfPanelScriptSources 面板扫描来源）
 ├── quickAddSettingsTab.ts     设置页（Banner / 分组待改造，见 PENDING）
 ├── quickAddApi.ts             暴露给脚本的 API（api.ai / api.suggester 等）
 ├── choiceExecutor.ts          Choice 执行入口
@@ -45,15 +45,12 @@ src/
     │   ├── Sync.ts             vault 事件监听 + 500ms debounce + 2s 节流增量同步
     │   ├── DbLog.ts            同步 / 重建错误日志（写回 vault）
     │   └── index.ts            createDBApi（暴露给脚本的 exec / query / rebuild / status）
-    ├── scripts/               内置脚本（源码字符串，打包进 main.js；**目录即分组**）
-    │   ├── ScriptReleaser.ts    释放到 00.SYSTEM/xdf_base/（逐级建目录 + 旧布局清理）
-    │   ├── index.ts             SCRIPTS（按目录登记）+ ASSETS + GROUP_ORDER
-    │   ├── lib/archive-utils.ts ★ 建档 / 课次包核心工具库（释放为 utils/ArchiveUtils.js）
-    │   ├── runtime/xdf-runtime.ts 共享运行时源码（释放为 utils/XdfRuntime.js，QuickAdd 侧双入口用）
-    │   ├── 档案管理/             一对一建档 / 班课建档 / 一对一每课记录 / 班课每课记录
-    │   ├── 文件生成/             AI出作业 / 词表工具
-    │   ├── 行政工作/             周例会建档 / 周例会记录 / 例会添加页面
-    │   └── 通用/                 新建笔记 / 追加到笔记
+    ├── scripts/               内置脚本（源码字符串，打包进 main.js；**presets 目录即分组**）
+    │   ├── scriptRegistry.ts    从 manifest.generated 装配 SCRIPTS + ASSETS + GROUP_ORDER
+    │   ├── ScriptReleaser.ts    释放到 00.SYSTEM/xdf_base/scripts/（源码目录即释放路径）
+    │   ├── manifest.generated.ts auto-manifest.mjs 构建期生成并提交入库（勿手改）
+    │   ├── presets/<分组>/       业务脚本：档案管理×4 / 文件生成×2 / 行政工作×3 / 通用×2
+    │   └── assets/              共享资产（扁平）：ArchiveUtils.ts / XdfRuntime.ts
     └── types/
         └── sql.js.d.ts
 ```
@@ -69,7 +66,7 @@ src/
 | [relocateArchive()](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L187-L232) | 整夹 `vault.rename` 到 `settings.folderStructure` 的 active/archived 目录，并改 frontmatter `status` | 目标已存在则中止；status 用无边界正则替换（技术债） |
 | [openTeachingLayout()](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L237-L279) | 主窗口开 Feedback，popout 开 Wordlist，再垂直 split 开 Note | 触发条件：`#课程记录` 标签 + `lesson_number > 0`；重复点击会累积 popout |
 | [reconcileOnStartup()](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L287-L349) | 启动对账：空库全量重建；vault 有库无 / mtime 变 → 补 upsert；库有 vault 无 → 按路径删 | 上帝函数（63 行，待拆分，见 PENDING） |
-| [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) | 按 `src/xdf/scripts/<分组>/` 动态构建分组文件夹（Multi Choice）写入 `settings.choices` | id 前缀 `xdf-group-` / `xdf-script-`；原位覆盖保留折叠态；`xdf-base-*` / `xdf-panel-*` 与消失分组的旧文件夹清理；用户自建 Choice 不动 |
+| [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) | 按 `src/xdf/scripts/presets/<分组>/` 动态构建分组文件夹（Multi Choice）写入 `settings.choices` | id 前缀 `xdf-group-` / `xdf-script-`；原位覆盖保留折叠态；`xdf-base-*` / `xdf-panel-*` 与消失分组的旧文件夹清理；用户自建 Choice 不动 |
 | [InlineGroup.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/InlineGroup.ts) | 把单行 `出勤：[ ] 正常 \| [ ] 迟到 …` 渲染为内联 checkbox 组 | Live Preview 用 CM6 ViewPlugin + WidgetType；阅读模式用 MarkdownPostProcessor；点击回写文本，随插件生命周期自动清理 |
 | [db/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/index.ts) | `createDBApi` 暴露 `exec / query / rebuild / status / setSyncEnabled / isSyncEnabled` | 挂载点：`plugin.api.db`（`main.ts get api()` 懒 getter，2026-10-17 接上）；另有 `plugin._xdfBase.getDBApi()` 与全局单例 `getXdfBaseInstance()` |
 | [db/Connection.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts) | sql.js（WASM）连接管理，库文件 `.xdf/xdf.db` | WASM 经 esbuild binary loader 内联进 main.js；`save()` 直接 writeBinary 非原子；`clear()` 失败态不一致（技术债） |
@@ -77,16 +74,17 @@ src/
 | [db/Builder.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Builder.ts) | 文件快照解析入库：`rebuildDatabase`（全量）、`DBWriter`（增量 upsert/remove） | 写入顺序按归属链依赖：档案 → nav → 其余 |
 | [db/Parser.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Parser.ts) | frontmatter 块解析、`detectKind`、章节切块、内联 checkbox 组解析 | 与 InlineGroup 共用同一「单行 checkbox 组」契约 |
 | [db/Sync.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Sync.ts) | vault create/modify/delete/rename 事件 → 500ms debounce + 2s 节流 → 分桶增量写库 | 最终一致 ≈2.5s；`shouldTrack` 已加 `instanceof TFile` 守卫；handleEvent 不区分 create/modify（技术债） |
-| [scripts/ScriptReleaser.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/ScriptReleaser.ts) | 把 `SCRIPTS` + `ASSETS` 释放到 `00.SYSTEM/xdf_base/`（`scripts/<分组>/` + `utils/`） | 逐级建目录；无条件覆盖；旧扁平脚本与 `panel-scripts/` 一次性清理；用户自建脚本不动 |
-| [scripts/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/index.ts) | `SCRIPTS`（11 项，path 决定分组）+ `ASSETS`（ArchiveUtils / XdfRuntime）+ `GROUP_ORDER` | 脚本 id / QuickAdd 菜单名 / 释放文件名三者 = 中文文件名；分组取自 path 第一段；加脚本只需登记一行 |
-| [scripts/runtime/xdf-runtime.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/runtime/xdf-runtime.ts) | 共享运行时源码（`utils/XdfRuntime.js`）：`run(mod)` 造 native ctx（`ask` 经 `api.suggester / inputPrompt / wideInputPrompt / datePrompt`）顺序跑 `collect → execute` | QuickAdd 侧双入口唯一支点；面板侧不加载它 |
-| [scripts/lib/archive-utils.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/lib/archive-utils.ts) | 建档 / 课次包核心工具库：nav 生成、相对路径链接（`./`、`../`）、7 文件课次包、反馈块 | 被其他脚本加载，不作为可运行 Choice |
+| [scripts/ScriptReleaser.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/ScriptReleaser.ts) | 把 `SCRIPTS` + `ASSETS` 释放到 `00.SYSTEM/xdf_base/scripts/`（源码目录即释放路径） | 逐级建目录；无条件覆盖；旧释放文件不自动迁移，由用户手动清理；用户自建脚本不动 |
+| [scripts/manifest.generated.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/manifest.generated.ts) | 构建期由 [auto-manifest.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/scripts/auto-manifest.mjs) 扫 `presets/` / `assets/` 生成的脚本清单（`GENERATED_SCRIPTS` 11 项 + `GENERATED_ASSETS` 2 项），提交入库 | 勿手改；fail-fast：presets 根级散装文件、空分组、assets 子目录、缺失 / 重复 `*_SCRIPT` 导出即构建报错 |
+| [scripts/scriptRegistry.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/scriptRegistry.ts) | 从自动清单装配 `SCRIPTS`（path = `scripts/presets/<分组>/<名>.js`）+ `ASSETS`（path = `scripts/assets/<名>.js`）+ `GROUP_ORDER` + `groupScripts()` | id / QuickAdd 菜单名 / 释放文件名 = 中文文件名；分组 = presets 分组目录；加脚本只需落文件，构建自动入清单 |
+| [scripts/assets/XdfRuntime.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/assets/XdfRuntime.ts) | 共享运行时源码（释放为 `scripts/assets/XdfRuntime.js`）：`run(mod)` 造 native ctx（`ask` 经 `api.suggester / inputPrompt / wideInputPrompt / datePrompt`）顺序跑 `collect → execute` | QuickAdd 侧双入口唯一支点；面板侧不加载它 |
+| [scripts/assets/ArchiveUtils.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/assets/ArchiveUtils.ts) | 建档 / 课次包核心工具库（释放为 `scripts/assets/ArchiveUtils.js`）：nav 生成、相对路径链接（`./`、`../`）、7 文件课次包、反馈块 | 被其他脚本经 `loadUtils(ctx)` 加载，不作为可运行 Choice |
 | [runner/types.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/runner/types.ts) | 两段式脚本契约：`ScriptContext`（`app`/`mode`/`scriptId`/`ask`/`notice`）、`TwoStageModule`（`collect`/`execute`）、`ScriptField = FieldRequirement` | runner 层不依赖 UI；脚本与宿主唯一通道是 `ctx` |
 | [runner/ScriptRunner.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/runner/ScriptRunner.ts) | 驱动两段式脚本：`collect` 登记字段 + 解析动态选项、`execute` 注入 params 与 ctx | 字段去重保序；`execute` 的 `ctx.ask` 直接抛错、唯一写盘 |
 | [runner/ScriptModuleLoader.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/runner/ScriptModuleLoader.ts) | 载入面板脚本源码并求值：`new Function("require","module","exports", code)` → `isTwoStageModule` 校验 | 与 QuickAdd 对象导出求值同构 |
 | [runner/AnswerStore.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/runner/AnswerStore.ts) | 面板填答持久化：`00.SYSTEM/xdf_base/panel/answers.json`，key = `scriptId:fieldId` | 与 QuickAdd `data.json` 隔离，退出不重填 |
 | [panel/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/panel/index.ts) | `registerScriptPanel`：`registerView` + ribbon + command；`activateScriptPanel` 聚焦已有 leaf 或右侧栏新建 | `registerView` 必须在 `onload` 内同步完成 |
-| [panel/XdfScriptPanelView.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/panel/XdfScriptPanelView.ts) | 面板 ItemView：选脚本 → 跑 `collect` 出表单 → 值变化防抖重算 → 点运行跑 `execute` | 仅 `schemaKey` 变化才重渲染，避免丢焦点 |
+| [panel/XdfScriptPanelView.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/panel/XdfScriptPanelView.ts) | 面板 ItemView：两段式脚本选择器——收起态只显示选中脚本触发条（不带组名），点开为全量分组选择界面（组可折叠），选完自动收回；扫描 = 内置 presets + 设置页自定义来源 → 跑 `collect` 出表单 → 值变化防抖重算 → 点运行跑 `execute` | 仅 `schemaKey` 变化才重渲染，避免丢焦点；开合状态仅内存保持 |
 | [panel/PanelFormRenderer.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/panel/PanelFormRenderer.ts) | 按 `FieldRequirement` 渲染表单控件、回填 / 取值 | 选项越界回落首项 |
 | ai/ / engine/ / formatters/ / gui/ / cli/ | 上游 QuickAdd 能力域（见上「目录结构」），XDF 未改其内部实现 | 仅通过 `XdfBaseExtension` 调用其中少量 API（`openPopoutLeaf` 等） |
 
@@ -97,7 +95,7 @@ src/
 ```
 main.onload
   └─ new XdfBaseExtension(app, plugin).initialize()
-       ① ScriptReleaser.releaseAll()      内置脚本 → 00.SYSTEM/xdf_base/scripts/<分组>/ + utils/（覆盖 + 清理旧布局）
+       ① ScriptReleaser.releaseAll()      内置脚本 → 00.SYSTEM/xdf_base/scripts/presets/<分组>/ + scripts/assets/（覆盖）
        ② syncPresetChoices(settings.choices)  按目录分组重建 Multi 文件夹（原位覆盖）
        ③ db.initialize() → Schema.apply() → registerDBApi() → reconcileOnStartup()
        ④ sync.attach()                    监听 vault 事件
@@ -105,9 +103,9 @@ main.onload
        ⑥ workspace.on('file-menu')        归档/恢复 + 授课布局
 ```
 
-**脚本释放流**：`SCRIPTS` / `ASSETS`（源码字符串，[scripts/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/index.ts)）→ esbuild 打包进 main.js → 启动时 `ScriptReleaser` 写入 `00.SYSTEM/xdf_base/scripts/<分组>/<中文名>.js` 与 `utils/`（非点目录，QuickAdd 的 `getUserScript` 需走 vault 索引），并删除旧版扁平脚本与 `panel-scripts/`。同一步经 [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) 把脚本登记为 Macro Choice（内含 UserScript 命令）。
+**脚本释放流**：`SCRIPTS` / `ASSETS`（源码字符串，[scriptRegistry.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/scriptRegistry.ts) 装配自 [manifest.generated.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/manifest.generated.ts)）→ esbuild 打包进 main.js → 启动时 `ScriptReleaser` 按「源码目录即释放路径」写入 `00.SYSTEM/xdf_base/scripts/presets/<分组>/<中文名>.js` 与 `scripts/assets/<英文名>.js`（非点目录，QuickAdd 的 `getUserScript` 需走 vault 索引）。旧释放文件不做兼容迁移，由用户手动清理。同一步经 [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) 把脚本登记为 Macro Choice（内含 UserScript 命令）。
 
-**Choice 同步流**：`groupScripts()`（按 `src/xdf/scripts/<分组>/` 归并）→ `xdf-group-<分组>` 文件夹 → id 精确或同名接管 → 原位重建 children（保留 collapsed）→ `xdf-base-*` / `xdf-panel-*` 与已消失分组的旧文件夹清理 → 用户自建 Choice 保留。
+**Choice 同步流**：`groupScripts()`（按 `src/xdf/scripts/presets/<分组>/` 归并）→ `xdf-group-<分组>` 文件夹 → id 精确或同名接管 → 原位重建 children（保留 collapsed）→ `xdf-base-*` / `xdf-panel-*` 与已消失分组的旧文件夹清理 → 用户自建 Choice 保留。
 
 **DB 同步流**（[db/Sync.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Sync.ts#L148-L273)）：
 
@@ -131,19 +129,20 @@ vault create/modify/delete/rename
 
 ```
 ribbon / 命令 → activateScriptPanel → XdfScriptPanelView.onOpen
-  → 载入 00.SYSTEM/xdf_base/scripts/**/*.js（递归扫描 + isTwoStageModule）
-  → 选脚本 → ScriptRunner.collect（登记字段 + 扫 vault 出动态选项）→ PanelFormRenderer 渲染
+  → 扫描根 = 内置 00.SYSTEM/xdf_base/scripts/presets/（写死）+ 设置页自定义来源（xdfPanelScriptSources）
+     逐根递归 .js + isTwoStageModule；根名不作分组，组 = 根内第一层子目录名，散装归「其他」；重名内置优先
+  → 折叠分组菜单选脚本 → ScriptRunner.collect（登记字段 + 扫 vault 出动态选项）→ PanelFormRenderer 渲染
   → 值变化（350ms 防抖）→ 重跑 collect → 仅 schemaKey 变化才重渲染
   → 点运行 → 再 collect 取最终 params → ScriptRunner.execute（唯一写盘）→ 答案落 answers.json
 ```
 
 两段式把「收集」与「执行」解耦：`collect` 纯只读（可随便重跑 / 回退 / 中断），`execute` 只从 params 取输入、禁弹窗。面板只认 `FieldRequirement`，不认脚本内容；脚本只经 `ctx` 访问宿主，不感知谁在驱动（面板或原生弹窗）。
 
-**双入口运行流**（QuickAdd 侧，[xdf-runtime.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/xdf-runtime.ts)）：
+**双入口运行流**（QuickAdd 侧，[assets/XdfRuntime.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/assets/XdfRuntime.ts)）：
 
 ```
 QuickAdd UserScript → MOD.entry
-  → 读取 00.SYSTEM/xdf_base/utils/XdfRuntime.js（new Function 求值）→ runtime.run(MOD)
+  → 读取 00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js（new Function 求值）→ runtime.run(MOD)
   → 造 native ctx（ask 逐项弹窗：suggester / inputPrompt / wideInputPrompt / datePrompt）
   → 顺序跑 collect → execute
 ```
@@ -154,6 +153,7 @@ QuickAdd UserScript → MOD.entry
 
 - **fork 而非插件外挂**：XDF 能力直接改在 QuickAdd 分支内，而非独立插件。好处是可复用 QuickAdd 的引擎 / 脚本执行 / AI；代价是需跟随上游演进。为降低耦合，所有自研代码集中于 `src/xdf/`，唯一侵入点 `XdfBaseExtension`（[文件头注释](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L1-L12) 明确此意图，便于升级时 cherry-pick）。
 - **脚本以源码字符串打包**：预设脚本不是独立文件，而是 TS 模块导出的字符串，esbuild 打进 main.js，运行时释放到 vault。目的：内置脚本随插件升级自动送达老师端，零外部依赖。
+- **清单自动生成（prebuild）**：esbuild 不支持 `import.meta.glob`，由 [scripts/auto-manifest.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/scripts/auto-manifest.mjs) 在构建期扫描 `presets/` / `assets/` 生成 `manifest.generated.ts`（提交入库），`dev` / `build` / `build-with-lint` 前置运行。目录即清单，加脚本只需落文件；manifest.generated ⇄ scriptRegistry 的类型互引用 `import type`，运行时无环。
 - **无条件覆盖 + 清单隔离**：启动全量覆盖 `SCRIPTS` / `ASSETS` 内的文件与按目录生成的分组 Choice，只动清单内对象，用户自建内容不受影响。产品方定性为「设计如此」（见 PENDING）。
 - **sql.js（WASM）+ 镜像库**：不引入原生 SQLite 依赖；WASM 经 binary loader 内联。库是 md 的只读查询镜像，md 仍是唯一数据源，事件驱动增量同步 + 启动对账保证最终一致。
 - **单行源 + 双模式渲染**：Feedback 的 checkbox 组源文件保持单行（多行横排 CSS 已证伪），渲染交给 CM6 Widget + 阅读模式 PostProcessor，点击回写文本。
@@ -162,7 +162,7 @@ QuickAdd UserScript → MOD.entry
 ## 6. 构建与发布
 
 - **包管理**：pnpm（`packageManager: pnpm@10.32.1`），Node `^20.19.0 || >=22.12.0`。
-- **构建**：`pnpm run build` = `tsc -noEmit -skipLibCheck` + `node esbuild.config.mjs production`（[esbuild.config.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/esbuild.config.mjs)）。entry `src/main.ts` + `src/styles.css`，`loader: { ".wasm": "binary" }` 内联 WASM，产物落到 `dist/`（main.js + styles.css），末尾 `copyFileSync` 复制 manifest.json。
+- **构建**：`pnpm run build` = `node scripts/auto-manifest.mjs`（生成 manifest.generated.ts）+ `tsc -noEmit -skipLibCheck` + `node esbuild.config.mjs production`（[esbuild.config.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/esbuild.config.mjs)）。entry `src/main.ts` + `src/styles.css`，`loader: { ".wasm": "binary" }` 内联 WASM，产物落到 `dist/`（main.js + styles.css），末尾 `copyFileSync` 复制 manifest.json。
 - **开发**：`pnpm run dev`（watch）。**校验**：`pnpm run lint`（eslint）、`pnpm run check`（svelte-check）。**测试**：`pnpm test`（vitest）、`pnpm run test:e2e`（vitest e2e）。
 - **发布**：[.github/workflows/release.yml](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/.github/workflows/release.yml) 由 tag `v*` 触发：Setup pnpm → 校验 `package.json` / `manifest.json` / tag **三者版本一致** → Build → 校验产物（main.js / manifest.json / styles.css）→ 创建 Release（自动生成 release notes）。
 
@@ -170,11 +170,11 @@ QuickAdd UserScript → MOD.entry
 
 - **XDF 自研代码一律放 `src/xdf/`**，对上游主代码的修改只允许集中在 `XdfBaseExtension` 装配点；不要散落改动 `ai/`、`engine/`、`formatters/`、`gui/`。
 - **md 是唯一数据源**，数据库只是查询镜像；任何写库逻辑不得反向覆盖 md。
-- 内置脚本必须登记进 `SCRIPTS`（[scripts/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/index.ts)）才会被释放与同步；**分组由 `src/xdf/scripts/<分组>/` 目录决定**，不单独登记成员；脚本 id（= 文件名）全局唯一。
+- 内置脚本落进 `src/xdf/scripts/presets/<分组>/` 即自动入清单（构建期 [auto-manifest.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/scripts/auto-manifest.mjs) 扫描生成）才会被释放与同步；**分组由 presets 下的目录决定**，不单独登记成员；脚本 id（= 文件名）全局唯一。
 - **两段式脚本契约（强制）**：脚本导出 `module.exports = { meta?, collect, execute }`。`collect(ctx)` 只**读** vault + 经 `ctx.ask(field)` 取输入、**禁止**写盘（`create`/`modify`/`rename`/`delete`）；`execute(params, ctx)` 只从 `params` 取全部输入、**禁止弹窗 / 禁止 `ctx.ask`**、是**唯一**允许写盘之处。
-- **双入口（可选）**：额外挂 `MOD.entry`（`const MOD = {...}; MOD.entry = ...; module.exports = MOD;`），`entry` 载入 `utils/XdfRuntime.js` 调 `run(MOD)`，即可在 QuickAdd 里顺跑同一份 `collect` / `execute`；不挂 `entry` 则仅面板可跑。字段定义与业务逻辑都只写一份，两条路只差 asker 实现。
+- **双入口（可选）**：额外挂 `MOD.entry`（`const MOD = {...}; MOD.entry = ...; module.exports = MOD;`），`entry` 载入 `scripts/assets/XdfRuntime.js` 调 `run(MOD)`，即可在 QuickAdd 里顺跑同一份 `collect` / `execute`；不挂 `entry` 则仅面板可跑。字段定义与业务逻辑都只写一份，两条路只差 asker 实现。
 - 取输入唯一入口是 `ctx.ask(field)`（字段复用 `FieldRequirement`，`type ∈ text|number|textarea|dropdown|slider|date|field-suggest|file-picker|suggester`）；**禁止**脚本直接调 `qa().inputPrompt / suggester / datePrompt` 等。
-- 清单只有两份：可运行脚本登记进 `SCRIPTS`（释放到 `scripts/<分组>/<中文名>.js`，并按目录自动注册进 QuickAdd 分组文件夹），共享资产登记进 `ASSETS`（释放到 `utils/`，非可运行脚本，不进菜单、不进面板）。
+- 清单只有两份：业务脚本入 `SCRIPTS`（释放到 `scripts/presets/<分组>/<中文名>.js`，并按目录自动注册进 QuickAdd 分组文件夹），共享资产入 `ASSETS`（释放到 `scripts/assets/<英文名>.js`，非可运行脚本，不进菜单、不进面板）。
 - 表结构以仓库外「数据库模板.sql」为权威，改结构需同步 [Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Schema.ts) 的 DDL 副本并递增 `SCHEMA_VERSION`。
 - 脚本经 `app.plugins.plugins["xdf-base"].api` 取 QuickAdd API，经 `.settings.folderStructure` 取三文件夹路径。
 - 版本号三处需一致：`package.json` / `manifest.json` / release tag。
@@ -182,14 +182,14 @@ QuickAdd UserScript → MOD.entry
 
 ### 两段式脚本规范（细则）
 
-**双入口模型**：同一份 `collect` / `execute`，两种 `ctx` 实现 —— 面板由 `XdfScriptPanelView` → `ScriptRunner` 驱动（递归扫 `scripts/**/*.js`，`ctx.ask` 为**声明式**：登记字段 → 回填 → 整表渲染）；QuickAdd 由 `MOD.entry` 载入 `utils/XdfRuntime.js` 后 `R.run(MOD)` 驱动（`ctx.ask` 为**命令式**：立即弹窗）。QuickAdd 用 `new Function("require","module","exports", src)` 求值，只注入这三者，故脚本里 `app` 只能来自 Obsidian 全局。
+**双入口模型**：同一份 `collect` / `execute`，两种 `ctx` 实现 —— 面板由 `XdfScriptPanelView` → `ScriptRunner` 驱动（递归扫 `scripts/**/*.js`，`ctx.ask` 为**声明式**：登记字段 → 回填 → 整表渲染）；QuickAdd 由 `MOD.entry` 载入 `scripts/assets/XdfRuntime.js` 后 `R.run(MOD)` 驱动（`ctx.ask` 为**命令式**：立即弹窗）。QuickAdd 用 `new Function("require","module","exports", src)` 求值，只注入这三者，故脚本里 `app` 只能来自 Obsidian 全局。
 
 **文件与命名**（源码文件名 = 释放文件名 = 面板 id = QuickAdd 菜单名，四者统一为同一中文）：
 
-- 源码 `src/xdf/scripts/<分组>/<中文名>.ts`，导出 `PANEL_<UPPER_SNAKE>_SCRIPT = String.raw\`...\``（导出名沿用英文符号，文件名用中文）。
-- 释放到 `scripts/<分组>/<中文名>.js`，在 `SCRIPTS` 里登记 `<分组>/<中文名>.js` 一条路径即可；分组与 id 都由路径推导。
-- QuickAdd 分组文件夹按 `scripts/` 下的文件夹自动生成（id `xdf-group-<分组>`），单条 choice id 为 `xdf-script-<中文名>`；分组顺序由 `GROUP_ORDER` 指定，未列出的分组按名称排在后面。
-- 面板 `id` = 释放文件名去 `.js`；分组 = 相对 `scripts/` 的第一段目录名。
+- 源码 `src/xdf/scripts/presets/<分组>/<中文名>.ts`，导出唯一 `export const PANEL_<UPPER_SNAKE>_SCRIPT = String.raw\`...\``（导出名沿用英文符号，文件名用中文）。
+- 释放到 `scripts/presets/<分组>/<中文名>.js`；构建期自动入清单（auto-manifest 扫 `presets/` / `assets/`），分组与 id 都由路径推导，**无需手工登记**。
+- QuickAdd 分组文件夹按 `presets/` 下的文件夹自动生成（id `xdf-group-<分组>`），单条 choice id 为 `xdf-script-<中文名>`；分组顺序由 `GROUP_ORDER` 指定，未列出的分组按名称排在后面。
+- 面板 `id` = 释放文件名去 `.js`；面板分组 = 相对扫描根（内置为 `presets/`）的第一段目录名，扫描根名本身永不显示。
 
 **骨架（逐字遵守）**：
 
@@ -200,7 +200,7 @@ QuickAdd UserScript → MOD.entry
  * execute：只从 params 取输入，唯一写盘处
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 
 function loadRuntime() {
     return app.vault.adapter.read(RUNTIME_PATH).then(function (code) {
@@ -249,21 +249,21 @@ module.exports = MOD;
 6. **不用全局 `app` / `Notice`**：一律 `ctx.app` / `ctx.notice`（工具库 `ArchiveUtils` 内部的 `Notice` 不动）。
 7. **关键提示放 execute**：面板 collect 阶段的 `ctx.notice` 不会显示，仅作 best-effort。
 8. **保持原异常文案**：collect 取到空值时 native 直接 `throw`（复刻「立即中止」）；面板把原值交给 execute 校验并 `ctx.notice` 同一文案。
-9. **复用工具库**：需要 `ArchiveUtils` 时照抄 [一对一建档.ts:21](./src/xdf/scripts/档案管理/一对一建档.ts#L21) 的 `loadUtils(ctx)`（`ctx.app.vault.adapter.read` + `new Function("module","exports","app", code)(mod, mod.exports, ctx.app)`），只改文件名。
-10. **不新建旧式预设脚本**：内置脚本一律采用本规范的两段式，放进 `src/xdf/scripts/<分组>/<中文名>.ts`；不再写只给 QuickAdd 用的扁平 `String.raw` 预设。
+9. **复用工具库**：需要 `ArchiveUtils` 时照抄 [一对一建档.ts:21](./src/xdf/scripts/presets/档案管理/一对一建档.ts#L21) 的 `loadUtils(ctx)`（`UTILS_PATH` 指向 `00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js`，`ctx.app.vault.adapter.read` + `new Function("module","exports","app", code)(mod, mod.exports, ctx.app)`），只改文件名。
+10. **不新建旧式预设脚本**：内置脚本一律采用本规范的两段式，放进 `src/xdf/scripts/presets/<分组>/<中文名>.ts`；不再写只给 QuickAdd 用的扁平 `String.raw` 预设。
 
-**验证**：面板需重启插件触发 `scripts/<分组>/<中文名>.js` 释放；QuickAdd 在对应分组文件夹下自动出现同名命令（`entry` → 直接顺跑，不弹成员选择器）；编译用 wsl 路径 `pnpm build`。
+**验证**：编译用 wsl 路径 `pnpm build`（前置自动清单生成 + tsc + esbuild，构建通过即新脚本已入清单）；面板需重启插件触发 `scripts/presets/<分组>/<中文名>.js` 释放；QuickAdd 在对应分组文件夹下自动出现同名命令（`entry` → 直接顺跑，不弹成员选择器）。
 
 ## 8. 已知技术债
 
 取自 [PENDING.md](./PENDING.md)「代码审查整改计划（2026-10-04）」，此处只列架构层面的记录点：
 
-- **AI 产物无条件覆盖当前笔记**（[词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/AI出作业.ts)），无备份 / 预览 / 确认。
-- **homework-ai 半成品逻辑仍随「AI 出作业」发布**（[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/AI出作业.ts)），每次启动随插件释放。
+- **AI 产物无条件覆盖当前笔记**（[词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)），无备份 / 预览 / 确认。
+- **homework-ai 半成品逻辑仍随「AI 出作业」发布**（[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)），每次启动随插件释放。
 - **词表工具手写 JSON 清洗脆弱**（围栏剥离 / 括号夹取 / 静默兜底），应改结构化输出。
 - **`XdfBaseExtension` 承担过多实现细节**：`reconcileOnStartup` 是 63 行上帝函数；归档/恢复与授课布局耦合在同一 `file-menu` 回调；`relocateArchive` 内联了归档业务逻辑，应下沉。计划拆出 `Reconciler` / `menus/archiveMenu.ts` / `menus/teachingLayoutMenu.ts`（暂缓）。
 - **DB 层**：`Connection.save()` 直接 writeBinary 非原子（[127-144](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts#L127-L144)）；`clear()` 失败后内存/磁盘状态分裂（[161-173](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts#L161-L173)）。
 - **frontmatter `status` 无边界正则替换**（[XdfBaseExtension.ts:220-223](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L220-L223)）。
 - **`Sync.handleEvent` 不区分 create/modify**（[Sync.ts:101-104](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Sync.ts#L101-L104)），语义丢失。
-- **对 `TFile[]` 调 `sort()` 未传比较器**（[周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/行政工作/例会添加页面.ts)）。
+- **对 `TFile[]` 调 `sort()` 未传比较器**（[周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/行政工作/例会添加页面.ts)）。
 - **授课布局重复点击累积 popout 窗口**（[XdfBaseExtension.ts:237-279](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L237-L279)）。

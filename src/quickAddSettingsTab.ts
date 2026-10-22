@@ -410,6 +410,31 @@ export class QuickAddSettingsTab extends PluginSettingTab {
 					desc: "XDF-Base 内置课程记录脚本，每次启动自动释放到 00.SYSTEM/xdf_base/（内置脚本覆盖更新，用户新建的脚本不受影响）。",
 					render: (setting) => this.renderScriptPanel(setting),
 				},
+				{
+					name: "脚本面板扫描来源",
+					desc: "脚本面板除内置 presets 目录（始终扫描）外，额外扫描的 vault 目录，每行一个。目录名本身不作分组：组 = 目录内第一层子文件夹名，根级散装脚本归「其他」；与内置同名分组的脚本并入同组，重名时内置优先。只影响脚本面板，不影响释放与 QuickAdd 菜单。",
+					render: (setting) => {
+						setting.addTextArea((textArea) => {
+							textArea
+								.setPlaceholder("99.Scripts/我的脚本\n工具脚本")
+								.setValue(
+									(
+										settingsStore.getState()
+											.xdfPanelScriptSources || []
+									).join("\n"),
+								)
+								.onChange((value) => {
+									settingsStore.setState({
+										xdfPanelScriptSources: value
+											.split("\n")
+											.map((line) => line.trim().replace(/[\\/]+$/, ""))
+											.filter((line) => line.length > 0),
+									});
+								});
+							textArea.inputEl.rows = 3;
+						});
+					},
+				},
 			],
 		};
 	}

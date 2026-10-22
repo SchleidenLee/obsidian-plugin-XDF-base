@@ -1,6 +1,6 @@
 /**
  * 两段式脚本：班课建档
- * 释放到 00.SYSTEM/xdf_base/scripts/档案管理/班课建档.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/presets/档案管理/班课建档.js
  *
  * collect：只读扫描 + ctx.ask 取输入
  * execute：只从 params 取输入，唯一写盘处
@@ -9,14 +9,14 @@
 
 export const PANEL_ARCHIVE_CLASS_CREATE_SCRIPT = String.raw`/**
  * XDF 脚本 · 班课建档
- * 释放路径：00.SYSTEM/xdf_base/scripts/档案管理/班课建档.js
+ * 释放路径：00.SYSTEM/xdf_base/scripts/presets/档案管理/班课建档.js
  *
  * collect：只读扫描 + ctx.ask 取输入（不写盘）
  * execute：只从 params 取输入，唯一写盘处（禁止 ctx.ask / confirm）
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const UTILS_PATH = "00.SYSTEM/xdf_base/utils/ArchiveUtils.js";
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const UTILS_PATH = "00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 
 function loadUtils(ctx) {
     return ctx.app.vault.adapter.read(UTILS_PATH).then(function (code) {

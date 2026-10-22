@@ -9,30 +9,36 @@
 
 ---
 
+## 🟢 进行中
+
+（暂无）
+
+---
+
 ## 🟡 已定待做
 
 ### A. 代码审查整改（严重）
 
-- [ ] **AI 产物无条件覆盖用户当前笔记** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/AI出作业.ts)
+- [ ] **AI 产物无条件覆盖用户当前笔记** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)
   - 现象：两个 AI 脚本读完当前笔记后直接 `await app.vault.modify(file, ...)` 把 AI 产物写回当前笔记，无备份、无预览、无二次确认（词表脚本以生成的 6 列表格整体替换原内容，作业脚本以 `result.output` 整体替换）。
   - 影响：一旦 AI 输出异常（截断 / 乱码 / 误判素材）或用户选错目标笔记，原始内容不可逆丢失。产品方定性：词表脚本「覆盖写入当前笔记」属原设计但「可能需要再调整」，列为建议改进；`AI出作业` 上更严重（该脚本本身未完成）。
   - 修复方向：写入前先快照原文（如同名 `.bak` 或先 `create` 为新文件），或提供「先预览再确认落盘」；至少在 `modify` 前用 `Notice` + 确认交互拦截一次。
 
-- [ ] **homework-ai 半成品逻辑仍随「AI 出作业」发布** — [AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/AI出作业.ts)、[scripts/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/index.ts)
-  - 现象：`AI出作业` 脚本头自述「简化版骨架 / 完整的三阶段流水线实现留给后续」，但已作为正式条目登记进 `SCRIPTS`，启动时由 `ScriptReleaser` 释放到 `00.SYSTEM/xdf_base/scripts/文件生成/AI出作业.js`，并经 [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) 进入「文件生成」文件夹菜单。产品方确认：「确实没做，每次释放确实不应该」。
+- [ ] **homework-ai 半成品逻辑仍随「AI 出作业」发布** — [AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)、[scriptRegistry.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/scriptRegistry.ts)
+  - 现象：`AI出作业` 脚本头自述「简化版骨架 / 完整的三阶段流水线实现留给后续」，但源文件位于 `presets/文件生成/` 会被自动清单收录，经 `SCRIPTS` 于启动时由 `ScriptReleaser` 释放到 `00.SYSTEM/xdf_base/scripts/presets/文件生成/AI出作业.js`，并经 [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) 进入「文件生成」文件夹菜单。产品方确认：「确实没做，每次释放确实不应该」。
   - 影响：用户会看到并点击一个未完成的「AI 出作业」命令，得到半成品输出，且其落盘行为正好命中上一条「无条件覆盖当前笔记」，可能直接损坏笔记。
   - 修复方向：从 `SCRIPTS` 移除该条目（菜单随目录自动消失），待流水线完成后重新登记；如必须占位，改成显式「功能未实现」提示且不落盘、不覆盖。
 
 ### A. 代码审查整改（高）
 
-- [ ] **词表工具手写 JSON 清洗脆弱** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/词表工具.ts)
+- [ ] **词表工具手写 JSON 清洗脆弱** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)
   - 现象：用 `indexOf(BT)` / `lastIndexOf(BT)` 剥离反引号围栏（第 64-70 行），释义 / 例句含反引号会被截断；用 `indexOf("[")` / `lastIndexOf("]")` 夹取数组（第 71-74 行），前后杂文字的括号会误伤；解析后仅 `Array.isArray(entries)` 校验（第 80 行），不校验元素结构；渲染用 `e.word || ""` 等静默兜底（第 92-96 行）。产品方确认需整改。
   - 影响：模型输出稍偏离约定就会解析失败或渲染空白单元格，静默兜底吞掉结构化错误，用户看到「成功」但内容残缺。
   - 修复方向：改为模型结构化输出（见 B），把解析与校验交给 `parseStructured`/`validateValue`，失败显式报错、不落盘；仅保留最小文本兜底（去围栏 + 长度校验）应对上游不支持 `response_format` 的情况。
 
 ### A. 代码审查整改（中）
 
-- [ ] **对 `TFile[]` 调用 `sort()` 未传比较器** — [周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/行政工作/例会添加页面.ts)
+- [ ] **对 `TFile[]` 调用 `sort()` 未传比较器** — [周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/行政工作/例会添加页面.ts)
   - 现象：两处对 `.getMarkdownFiles()` 过滤后的数组直接 `.sort().reverse()`，`sort()` 走默认字符串（UTF-16 码元）排序。
   - 影响：中文与序号在字典序下未必符合预期（尤其多位数字序号），影响默认选中项与展示顺序。
   - 修复方向：显式传比较器（按路径 `localeCompare` 或按解析出的序号数值），并明确升降序意图。

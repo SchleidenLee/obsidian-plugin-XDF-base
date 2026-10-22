@@ -1,6 +1,6 @@
 /**
  * 两段式脚本：周例会建档
- * 释放到 00.SYSTEM/xdf_base/scripts/行政工作/周例会建档.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/presets/行政工作/周例会建档.js
  *
  * collect 只读 / execute 唯一写盘 / entry 为 QuickAdd 入口
  */
@@ -8,7 +8,7 @@
 export const PANEL_MEETING_SETUP_SCRIPT = String.raw`/**
  * XDF 脚本 · 周例会建档
  *
- * 释放路径：00.SYSTEM/xdf_base/scripts/行政工作/周例会建档.js
+ * 释放路径：00.SYSTEM/xdf_base/scripts/presets/行政工作/周例会建档.js
  *
  * 创建半年度导航页 + 同步创建「总结会」（每学期第一次会议）
  * 财年规则：每年 7 月开始新财年（FY27 = 2026-07 ~ 2027-06）
@@ -18,7 +18,7 @@ export const PANEL_MEETING_SETUP_SCRIPT = String.raw`/**
  * execute：只从 params 取输入，唯一写盘处
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 
 function loadRuntime() {
     return app.vault.adapter.read(RUNTIME_PATH).then(function (code) {

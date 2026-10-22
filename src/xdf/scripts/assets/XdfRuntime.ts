@@ -1,6 +1,6 @@
 /**
  * XDF 共享脚本运行时（双入口）
- * 释放到 00.SYSTEM/xdf_base/utils/XdfRuntime.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js
  *
  * QuickAdd 侧：脚本的 MOD.entry 用 new Function 载入本文件，调 run(MOD)，
  * 以 native ctx（逐项弹窗）顺序跑 collect → execute。

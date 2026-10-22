@@ -1,6 +1,6 @@
 /**
  * 两段式脚本：词表工具
- * 释放到 00.SYSTEM/xdf_base/scripts/文件生成/词表工具.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/presets/文件生成/词表工具.js
  *
  * collect 只读 / execute 唯一写盘 / entry 为 QuickAdd 入口
  */
@@ -8,7 +8,7 @@
 export const PANEL_WORDLIST_AI_SCRIPT = String.raw`/**
  * XDF 脚本 · 词表工具
  *
- * 释放路径：00.SYSTEM/xdf_base/scripts/文件生成/词表工具.js
+ * 释放路径：00.SYSTEM/xdf_base/scripts/presets/文件生成/词表工具.js
  * 流程：读当前笔记 → AI 提取词条（JSON）→ JS 打乱 → 排 6 列 md 表格 → 覆盖笔记
  * 模式：整理词表（单词|词性|汉意）/ 生成默写表（词性、汉意留空）
  * 短语不填词性。
@@ -16,7 +16,7 @@ export const PANEL_WORDLIST_AI_SCRIPT = String.raw`/**
  * execute：只从 params 取输入，唯一写盘处
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 const MODE_OPTIONS = ["dictation-false", "dictation-true"];
 const MODE_LABELS = ["整理词表", "生成默写表"];
 

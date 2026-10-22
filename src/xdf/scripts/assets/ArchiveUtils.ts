@@ -1,6 +1,6 @@
 /**
  * ArchiveUtils 工具函数库
- * 释放到 00.SYSTEM/xdf_base/utils/ArchiveUtils.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js
  *
  * 跨脚本共用：常量、frontmatter、选择器、课次包模板、档案回填。
  */
@@ -83,7 +83,7 @@ async function openFile(path, newLeaf) {
 }
 
 function loadUtilsCode() {
-    return app.vault.adapter.read("00.SYSTEM/xdf_base/utils/ArchiveUtils.js");
+    return app.vault.adapter.read("00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js");
 }
 
 // ========== 科目 / 文案 ==========

@@ -12,7 +12,7 @@
  * - 用户自己创建的 Choice → 完全不动
  */
 
-import { SCRIPTS, groupScripts, type XdfScript } from "./scripts";
+import { SCRIPTS, groupScripts, type XdfScript } from "./scripts/scriptRegistry";
 
 const SYSTEM_DIR = "00.SYSTEM/xdf_base";
 

@@ -1,6 +1,6 @@
 /**
  * 两段式脚本：追加到笔记
- * 释放到 00.SYSTEM/xdf_base/scripts/通用/追加到笔记.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/presets/通用/追加到笔记.js
  */
 
 export const PANEL_APPEND_TO_NOTE_SCRIPT = String.raw`/**
@@ -8,7 +8,7 @@ export const PANEL_APPEND_TO_NOTE_SCRIPT = String.raw`/**
  *
  * entry：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 
 function loadRuntime() {
     return app.vault.adapter.read(RUNTIME_PATH).then(function (code) {

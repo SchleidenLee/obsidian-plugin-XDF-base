@@ -66,6 +66,13 @@ export interface QuickAddSettings {
 		archived: string;
 		admin: string;
 	};
+	/**
+		* XDF：脚本面板的额外扫描来源（vault 目录列表）。内置 presets 目录
+		* （00.SYSTEM/xdf_base/scripts/presets）始终扫描、不可关闭，此处仅为追加。
+		* 根目录名本身不作分组——分组 = 根内第一层子目录名，根级散装归「其他」。
+		* 只影响脚本面板列表，不影响 ScriptReleaser 释放与 QuickAdd 菜单。
+		*/
+	xdfPanelScriptSources: string[];
 	ai: {
 		// Either a configured model's name or the "Ask me" sentinel. Model["name"]
 		// is `string`, which already covers the sentinel — adding `| "Ask me"` would
@@ -137,6 +144,8 @@ export const DEFAULT_SETTINGS: QuickAddSettings = {
 		archived: "Archived",
 		admin: "Admin",
 	},
+	// XDF：面板默认只扫内置 presets，自定义来源由老师在设置页追加
+	xdfPanelScriptSources: [],
 	ai: {
 		// XDF：脚本调 ai.prompt() 不传模型时使用此默认模型。
 		// 老师在 设置 → AI → 配置 AI 里可添加 provider 并更换模型。

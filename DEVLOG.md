@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-10-22 · 脚本面板：折叠分组菜单 + 扫描来源设置
+
+- [XdfScriptPanelView.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/panel/XdfScriptPanelView.ts) 的 `<select>` 换成自渲染折叠分组列表（组头点击折叠/展开、条目点击选中高亮、折叠态仅内存）；扫描改为多根：内置 `00.SYSTEM/xdf_base/scripts/presets/` 写死不可关 + 设置页「脚本面板扫描来源」（`xdfPanelScriptSources: string[]`，每行一个 vault 目录，[settings.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/settings.ts) 新增、[quickAddSettingsTab.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/quickAddSettingsTab.ts) XDF 区块多行文本框）。**扫描根名永不显示**：分组 = 根内第一层子目录名，根级散装归「其他」，跨来源同组合并，重名 presets 优先；来源不存在静默跳过；只影响面板，释放器与 QuickAdd 菜单不读。
+- **为什么**：目录重组后释放路径多出 `presets/` 结构层，旧「相对 scripts/ 取第一段」的分组全显示为 presets；且下拉不体现分组层级。老师需要自定义脚本目录进面板但不想污染内置释放，故扫描来源做成设置项，内置根写死保底。
+- 追加修复（同日实测反馈，两轮）①交互定型为**两段式选择器**：收起态只有一行触发条（显示当前选中脚本名、不带组名，其他组完全隐藏），点击才打开全量分组选择界面（组头可折叠），选完自动收回显示新选中项——第一版做成「默认全折叠 + 选中组自动展开」不符合需求，被实测推翻；②挤压消失：`.xdf-panel-tree` 展开态加 `flex: 0 1 auto` + `min-height: 90px`（overflow 容器在 flex 列里自动最小尺寸按 0 算，面板矮时被整个挤掉），收起态 `is-collapsed` 不占保底高度。
+
+---
+
+## 2026-10-22 · 脚本目录重组（presets/assets 分层 + prebuild 自动清单 + 统一释放映射）
+
+- 从 v1.4.12（7c3a2a6）回溯重做（上一轮重组因移动命令误操作丢文件，弃抢救、整轮回滚）：业务脚本移入 `src/xdf/scripts/presets/<分组>/`，共享资产移入 `assets/`（[ArchiveUtils.ts](./src/xdf/scripts/assets/ArchiveUtils.ts) / [XdfRuntime.ts](./src/xdf/scripts/assets/XdfRuntime.ts)），`index.ts` 改名重写为 [scriptRegistry.ts](./src/xdf/scripts/scriptRegistry.ts)。全部移动用 `git mv` 追踪。
+- 新增 [auto-manifest.mjs](./scripts/auto-manifest.mjs)：`dev` / `build` / `build-with-lint` 前置运行，扫描 `presets/*/*.ts` 与 `assets/*.ts` 生成 [manifest.generated.ts](./src/xdf/scripts/manifest.generated.ts)（提交入库，勿手改）；fail-fast 校验散装文件 / 空分组 / assets 子目录 / 缺失或重复 `*_SCRIPT` 导出。
+- [scriptRegistry.ts](./src/xdf/scripts/scriptRegistry.ts) 从自动清单装配 `SCRIPTS` / `ASSETS`（`GROUP_ORDER` / `groupRank` / `groupScripts` 保留，QuickAdd 分组对接不变）；[ScriptReleaser.ts](./src/xdf/scripts/ScriptReleaser.ts) 删除 `LEGACY_PATHS` / `LEGACY_DIRS` / `pruneLegacy()` 旧布局清理。
+- **统一释放映射（唯一规则）**：`src/xdf/scripts/<相对路径>/<名>.ts → 00.SYSTEM/xdf_base/scripts/<相对路径>/<名>.js`，即业务释放到 `scripts/presets/<分组>/<名>.js`、资产释放到 `scripts/assets/<名>.js`；11 个脚本内 `RUNTIME_PATH` / `UTILS_PATH` 字面量与头注释同步改指新路径。
+- **为什么**：此前加脚本需在 index.ts 手工登记一行，目录与清单两处维护、容易漏；且旧释放布局（`scripts/<分组>/` + `utils/`）与源码目录不一致，脚本内写死的工具路径字面量容易指错。改为「目录即清单、源码目录即释放路径」后，新增脚本只需落文件，分组、释放、面板、QuickAdd 菜单全自动。旧释放文件不做代码兼容迁移，由用户手动删除 `00.SYSTEM/xdf_base/` 后按新结构重新释放。
+
+---
+
 ## 2026-10-20 · 脚本按目录分组，源码/释放/面板/QuickAdd 四处统一中文命名
 
 - 源码目录重构：`src/xdf/scripts/` 下按既有三组 + 通用组落盘（`档案管理/` `文件生成/` `行政工作/` `通用/`），共享资产移到 `lib/`（ArchiveUtils）与 `runtime/`（XdfRuntime）。11 个两段式脚本由 `panel-<kebab>.ts` 改名为 `<中文名>.ts`；9 个旧扁平预设脚本源码删除（备份在 `XDF-obsidian-system/_backup/20261019-script-migration/`）。

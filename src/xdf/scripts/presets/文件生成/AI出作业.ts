@@ -1,6 +1,6 @@
 /**
  * 两段式脚本：AI 出作业
- * 释放到 00.SYSTEM/xdf_base/scripts/文件生成/AI出作业.js
+ * 释放到 00.SYSTEM/xdf_base/scripts/presets/文件生成/AI出作业.js
  *
  * collect 只读 / execute 唯一写盘 / entry 为 QuickAdd 入口
  */
@@ -8,12 +8,12 @@
 export const PANEL_HOMEWORK_AI_SCRIPT = String.raw`/**
  * XDF 脚本 · AI 出作业
  *
- * 释放路径：00.SYSTEM/xdf_base/scripts/文件生成/AI出作业.js
+ * 释放路径：00.SYSTEM/xdf_base/scripts/presets/文件生成/AI出作业.js
  * collect：只读扫描 + ctx.ask 取输入
  * execute：只从 params 取输入，唯一写盘处
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
-const RUNTIME_PATH = "00.SYSTEM/xdf_base/utils/XdfRuntime.js";
+const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
 const HOMEWORK_TYPE_OPTIONS = ["入门测", "作业"];
 const HOMEWORK_TYPE_LABELS = ["入门测 (15-20分钟)", "作业 (30+分钟)"];
 const VOCAB_LEVELS = ["不掺入", "A1", "A2", "B1", "B2", "C1"];
