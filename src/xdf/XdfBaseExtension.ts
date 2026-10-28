@@ -371,7 +371,7 @@ export class XdfBaseExtension {
     }
 
     /**
-     * 获取 db API
+     * 获取只读 db API（query / status / isSyncEnabled，无写入口）
      */
     getDBApi(): XdfDBApi {
         return createDBApi(this.app, this.db, this.sync);

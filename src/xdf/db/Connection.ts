@@ -79,6 +79,8 @@ export class DBConnection {
         }
         // 先置标志再 save：save() 内部有 ensureOpen 校验
         this.initialized = true;
+        // fail-closed：新库默认只读锁死，写权限只在 exec() 内临时开启
+        this.setReadOnly(true);
         if (!existed) {
             await this.save();
         }
@@ -86,9 +88,14 @@ export class DBConnection {
 
     /**
      * 执行 SQL（INSERT/UPDATE/DELETE/CREATE 等）
+     *
+     * 连接默认 query_only=ON（见 initialize），写操作只在
+     * 「开锁 → 执行 → finally 上锁」的窗口内合法。JS 单线程保证
+     * 该窗口原子，外部经 query() 递入的 CTE-DML 一律被引擎拒绝。
      */
     exec(sql: string, params?: any[]): void {
         this.ensureOpen();
+        this.setReadOnly(false);
         try {
             if (params) {
                 const stmt = this.database!.prepare(sql);
@@ -100,11 +107,16 @@ export class DBConnection {
             this.dirty = true;
         } catch (err) {
             throw new Error(`SQL 执行失败: ${sql}\n${err}`);
+        } finally {
+            this.setReadOnly(true);
         }
     }
 
     /**
      * 查询 SQL（SELECT），返回对象数组
+     *
+     * 运行在连接默认态 query_only=ON 下：任何写操作（含
+     * `WITH ... DELETE RETURNING` 型 CTE-DML）都会被引擎拒绝。
      */
     query<T = Record<string, any>>(sql: string, params?: any[]): T[] {
         this.ensureOpen();
@@ -168,6 +180,8 @@ export class DBConnection {
         this.database!.close();
         // 创建新连接
         this.database = new SQL.Database();
+        // 与 initialize() 一致：新库默认只读锁死
+        this.setReadOnly(true);
         this.dirty = true;
         await this.save();
     }
@@ -214,6 +228,17 @@ export class DBConnection {
      */
     getRawDatabase(): Database | null {
         return this.database;
+    }
+
+    /**
+     * 切换连接的引擎级只读开关（PRAGMA query_only）
+     *
+     * sql.js 不暴露 authorizer / stmt_readonly，query_only 是它能给的
+     * 唯一硬闸：ON 时任何写语句由 SQLite 引擎直接拒绝
+     * （"attempt to write a readonly database"），不依赖文本审查。
+     */
+    private setReadOnly(readonly: boolean): void {
+        this.database!.exec(`PRAGMA query_only = ${readonly ? "ON" : "OFF"}`);
     }
 
     private ensureOpen(): void {

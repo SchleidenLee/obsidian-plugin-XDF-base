@@ -111,7 +111,8 @@ export default class QuickAdd extends Plugin {
 			this,
 			new ChoiceExecutor(this.app, this),
 		);
-		// 挂载 xdf 数据库入口（v1.0.0 契约：api.db.query/exec/rebuild/status）。
+		// 挂载 xdf 数据库入口（契约：api.db 纯只读——query/status/isSyncEnabled，
+		// DB 是 vault 镜像，写只在内部 Sync/Builder。2026-10-28 定稿）。
 		// 懒 getter：XdfBaseExtension 在 onload 末尾才初始化，访问时再解析。
 		Object.defineProperty(api, "db", {
 			enumerable: true,
