@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-10-28 · `api.db` 门面收紧为纯只读（引擎级 query_only 硬闸）
+
+- [db/Connection.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts)：连接**默认锁死** `PRAGMA query_only=ON`（`initialize()` / `clear()` 新建库后立即上锁，fail-closed）；`exec()` 内部「开锁 → 执行 → finally 上锁」，写权限只在 exec 那一瞬间存在；`query()` 零改动，运行在默认只读态。[db/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/index.ts)：`XdfDBApi` 门面删 `exec` / `rebuild` / `setSyncEnabled`，仅留 `query` / `status` / `isSyncEnabled`；[main.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/main.ts) 与 [XdfBaseExtension.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts) 的「v1.0.0 契约：query/exec/rebuild/status」注释同步为只读契约。新增 [Connection.test.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.test.ts) 5 例（exec 窗口可写 / query 裸 DELETE 被拒 / CTE-DML 被拒 / 拒绝后锁不漏 / exec 抛错后锁回得上）。
+- **为什么**：DB 的设计定位就是 vault 的只读镜像——数据修改只发生在 md，由内部 Sync/Builder 回灌，外部经 `api.db` 写库本就不该是合法路径。toolkits 侧 A1（`query_db` 假只读：文本黑名单可被 `WITH ... DELETE` 型 CTE-DML 绕过）的根治点在这层：sql.js 不暴露 authorizer/stmt_readonly，`query_only` 是引擎能给的唯一硬闸，比文本审查可靠。影响面核实为零：门面消费者（ArchiveUtils 脚本、toolkits db.ts）只用 `query`+`status`；内部写路径直调 `DBConnection` 不走门面，Sync 的 500ms debounce + 2s 节流回灌全在 exec 合法窗口内。附带发现：当前 sql.js 内置 SQLite 连 `DELETE RETURNING` 语法都不支持（语法层即拒），硬闸是双保险。
+- 遗留（toolkits 侧配套）：base 发新版后 toolkits 提最低依赖版本、`query_db` 黑名单简化为透传引擎报错。
+
+---
+
 ## 2026-10-22 · 脚本面板：折叠分组菜单 + 扫描来源设置
 
 - [XdfScriptPanelView.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/panel/XdfScriptPanelView.ts) 的 `<select>` 换成自渲染折叠分组列表（组头点击折叠/展开、条目点击选中高亮、折叠态仅内存）；扫描改为多根：内置 `00.SYSTEM/xdf_base/scripts/presets/` 写死不可关 + 设置页「脚本面板扫描来源」（`xdfPanelScriptSources: string[]`，每行一个 vault 目录，[settings.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/settings.ts) 新增、[quickAddSettingsTab.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/quickAddSettingsTab.ts) XDF 区块多行文本框）。**扫描根名永不显示**：分组 = 根内第一层子目录名，根级散装归「其他」，跨来源同组合并，重名 presets 优先；来源不存在静默跳过；只影响面板，释放器与 QuickAdd 菜单不读。

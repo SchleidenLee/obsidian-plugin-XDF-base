@@ -19,12 +19,6 @@
 
 ### A. 代码审查整改（严重）
 
-- [ ] **`api.db` 门面收紧为纯只读** — [db/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/index.ts)、[XdfBaseExtension.ts:376](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L376)
-  - 背景（2026-10-28 定）：DB 设计定位就是 vault 的只读镜像——数据修改只发生在 md 文件，由 base 内部 Sync/Builder 回灌；外部经 `api.db` 写库**本就不该是合法路径**。toolkits 侧 A1（query_db 假只读，CTE-DML 可绕过）的根治点在 base 这层。
-  - 改动（2026-10-28 定，fail-closed 默认锁死）：连接默认 `PRAGMA query_only=ON`——`initialize()` / `clear()` 每次新建 Database 后立即打上；`Connection.exec()` 内部临时开锁（`try { query_only=OFF → 执行 → finally 恢复 ON }`），写权限只在 exec 那一瞬间存在，内部写方（Schema/Builder/Sync 回灌）全走 exec 零改动。`query()` 无需动作，默认态即引擎级只读——`WITH ... DELETE` 型 CTE-DML（SQLite 标准功能）由引擎直接拒绝，报 "attempt to write a readonly database"，不靠文本审查。JS 单线程保证「开锁→执行→上锁」原子。门面 `XdfDBApi` 同步删 `exec` / `rebuild` / `setSyncEnabled`（仅留 `query` / `status` / `isSyncEnabled`），外部连开锁入口都没有。sql.js 不暴露 authorizer / stmt_readonly，`query_only` 是它能给的唯一硬闸。
-  - 影响面（已核实）：门面消费者仅两处且都只用 `query`+`status`——[ArchiveUtils.ts:490](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/assets/ArchiveUtils.ts#L490)（3 处 SELECT）与 toolkits [db.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-tookits/src/xdf/db.ts)；内部写路径（Schema/Builder/reconcile）直调 `DBConnection` 不走门面，零影响。同步更新 index.ts 头注释与 [main.ts:114](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/main.ts#L114) 的「v1.0.0 契约：query/exec/rebuild/status」表述为只读契约。
-  - 配套：base 发新版后，toolkits 把 base 最低版本要求提到含此改动的版本；`query_db` 现有黑名单可简化为直接透传引擎报错。
-
 - [ ] **AI 产物无条件覆盖用户当前笔记** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)
   - 现象：两个 AI 脚本读完当前笔记后直接 `await app.vault.modify(file, ...)` 把 AI 产物写回当前笔记，无备份、无预览、无二次确认（词表脚本以生成的 6 列表格整体替换原内容，作业脚本以 `result.output` 整体替换）。
   - 影响：一旦 AI 输出异常（截断 / 乱码 / 误判素材）或用户选错目标笔记，原始内容不可逆丢失。产品方定性：词表脚本「覆盖写入当前笔记」属原设计但「可能需要再调整」，列为建议改进；`AI出作业` 上更严重（该脚本本身未完成）。
