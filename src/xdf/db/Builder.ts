@@ -22,6 +22,7 @@ import {
     parseInlineCheckboxGroups,
     parseAttendance,
     parseHomework,
+    parseDuoweiRoster,
     isLeafSection,
     normalizeTags,
     type FileKind,
@@ -29,6 +30,7 @@ import {
     type CheckboxDraft,
     type AttendanceDraft,
     type HomeworkDraft,
+    type DuoweiStudentRow,
 } from "./Parser";
 
 // ========== 输入类型 ==========
@@ -243,7 +245,8 @@ export class DBWriter {
         // 1. 清空（按 FK 反序删）
         this.db.exec(
             "DELETE FROM checkboxes; DELETE FROM sections; DELETE FROM files; " +
-            "DELETE FROM class_roster; DELETE FROM lessons; DELETE FROM archives; DELETE FROM students"
+            "DELETE FROM student_profile; DELETE FROM class_roster; " +
+            "DELETE FROM lessons; DELETE FROM archives; DELETE FROM students"
         );
 
         // 2. 第一遍：档案页（建 archives/students/class_roster，登记归属映射）
@@ -313,20 +316,26 @@ export class DBWriter {
         const kind = tags.includes("vip") ? "vip" : "class";
         const name = f.basename; // 档案名 = 文件名
 
+        // duowei 学员表（source of truth），缺失时回退档案页 md 表格
+        const duoweiContent = this.duoweiContents.get(f.path);
+        const duoweiRows = duoweiContent ? parseDuoweiRoster(duoweiContent) : [];
+        const rowByName = new Map(duoweiRows.map(r => [r.name, r]));
+
         // students：一对一挂主学生；班课从 duowei 或 md 表格提取
         let studentId: string | null = null;
-        const roster: Array<{ name: string; order: number }> = [];
+        const roster: Array<{ name: string; order: number; data: DuoweiStudentRow | null }> = [];
 
         if (kind === "vip") {
             studentId = this.upsertStudent(name);
+            // 一对一学员表只有本人一行（或姓名与档案名一致）
+            const self = rowByName.get(name) || (duoweiRows.length === 1 ? duoweiRows[0] : null);
+            if (self) this.upsertStudentProfile(studentId, self);
         } else {
-            // 优先从 duowei 文件读学员名单，回退到旧的 md 表格解析
-            const duoweiContent = this.duoweiContents.get(f.path);
-            const students = duoweiContent
-                ? parseStudentsFromDuowei(duoweiContent)
+            const students = duoweiRows.length
+                ? duoweiRows.map(r => r.name)
                 : parseStudentsFromBody(body);
             students.forEach((s, i) => {
-                roster.push({ name: s, order: i });
+                roster.push({ name: s, order: i, data: rowByName.get(s) ?? null });
             });
         }
 
@@ -363,14 +372,60 @@ export class DBWriter {
         this.archiveIdByFolder.set(f.path.substring(0, f.path.lastIndexOf("/")), id);
 
         // class_roster（先清后写，保持幂等）
+        // duowei 缺失时（回退 md 表格）保留已有结班测成绩，避免档案页重写把成绩抹掉
+        const prevScores = new Map<string, number | null>();
+        for (const row of this.db.query<{ student_id: string; final_exam_score: number | null }>(
+            "SELECT student_id, final_exam_score FROM class_roster WHERE archive_id = ?", [id]
+        )) {
+            if (row.student_id) prevScores.set(row.student_id, row.final_exam_score);
+        }
         this.db.exec("DELETE FROM class_roster WHERE archive_id = ?", [id]);
         for (const r of roster) {
             const sid = this.upsertStudent(r.name);
+            const score = r.data?.finalExamScore ?? prevScores.get(sid) ?? null;
             this.db.exec(
-                "INSERT INTO class_roster (archive_id, student_id, student_name, row_order) VALUES (?, ?, ?, ?)",
-                [id, sid, r.name, r.order]
+                "INSERT INTO class_roster (archive_id, student_id, student_name, row_order, final_exam_score) VALUES (?, ?, ?, ?, ?)",
+                [id, sid, r.name, r.order, score]
             );
+            if (r.data) this.upsertStudentProfile(sid, r.data);
         }
+    }
+
+    /**
+     * 写入学员全局属性（student_profile）
+     *
+     * 非空增量 upsert：跨班课学员表同步时，空值（NULL/空串）不覆盖已有非空值，
+     * 防止新增班课的空表把老班填好的信息冲掉。
+     * 整行全空时不建行（避免无意义的空档案）。
+     */
+    private upsertStudentProfile(studentId: string, row: DuoweiStudentRow): void {
+        const fields = [
+            row.ieltsNeeded, row.targetScore, row.examDate, row.examScore,
+            row.educationLevel, row.educationStatus, row.school, row.englishLevel, row.notes,
+        ];
+        if (fields.every(v => v === null)) return;
+
+        this.db.exec(
+            `INSERT INTO student_profile (student_id, ielts_needed, target_score, exam_date, exam_score,
+                education_level, education_status, school, english_level, notes, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(student_id) DO UPDATE SET
+                ielts_needed     = COALESCE(excluded.ielts_needed, student_profile.ielts_needed),
+                target_score     = COALESCE(excluded.target_score, student_profile.target_score),
+                exam_date        = COALESCE(NULLIF(excluded.exam_date, ''), student_profile.exam_date),
+                exam_score       = COALESCE(excluded.exam_score, student_profile.exam_score),
+                education_level  = COALESCE(NULLIF(excluded.education_level, ''), student_profile.education_level),
+                education_status = COALESCE(NULLIF(excluded.education_status, ''), student_profile.education_status),
+                school           = COALESCE(NULLIF(excluded.school, ''), student_profile.school),
+                english_level    = COALESCE(NULLIF(excluded.english_level, ''), student_profile.english_level),
+                notes            = COALESCE(NULLIF(excluded.notes, ''), student_profile.notes),
+                updated_at       = excluded.updated_at`,
+            [
+                studentId, row.ieltsNeeded, row.targetScore, row.examDate, row.examScore,
+                row.educationLevel, row.educationStatus, row.school, row.englishLevel, row.notes,
+                NOW(),
+            ]
+        );
     }
 
     // ========== 课次 nav ==========
@@ -681,21 +736,6 @@ function uuid(): string {
 function arrayOf(v: unknown): unknown[] {
     if (v == null) return [];
     return Array.isArray(v) ? v : [v];
-}
-
-/**
- * 从 duowei 文件内容提取学生姓名（f1 字段）
- */
-function parseStudentsFromDuowei(content: string): string[] {
-    try {
-        const doc = JSON.parse(content);
-        const records = doc.records || [];
-        return records
-            .map((r: { values?: Record<string, string> }) => r.values?.f1)
-            .filter((name: string | undefined): name is string => !!name);
-    } catch {
-        return [];
-    }
 }
 
 /**

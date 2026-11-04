@@ -13,54 +13,11 @@
 
 （暂无）
 
+> 学员表 DB 镜像（Phase 1~3）已于 2026-11-04 完成：`.duowei` → `student_profile`（非空增量 upsert）+ `class_roster.final_exam_score`，`.duowei` 变更自动触发同步。表结构见 [ARCHITECTURE.md](./ARCHITECTURE.md) / [Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Schema.ts)，变更史见 [DEVLOG.md](./DEVLOG.md)。
+
 ---
 
 ## 🟡 已定待做
-
-### 学员表 DB 镜像（Phase 3）：student_profile 表 + duowei Parser
-
-> Phase 1（md 表格 → duowei JSON）、Phase 2（模板/建档脚本/存量迁移）已于 2026-11-03 完成，见 DEVLOG。
-> 现状：duowei 是 source of truth；脚本经 `ArchiveUtils.parseStudentsFromArchive`（async，按字段名取 id）读 `{班号}学员表.duowei`。
-
-**Phase 3：DB 同步 — 新建 student_profile 表**
-
-> 🟢 2026-11-04 部分完成：`class_roster` 数据源已从 md 表格收敛到 duowei（`Builder.ts` 的 `writeArchive` 优先读 duowei，回退 md 表格；`Sync.ts` 增量同步时读 duowei 传给 writer）。见 DEVLOG。
-
-```sql
-student_profile (
-    student_id   TEXT PRIMARY KEY REFERENCES students(id),
-    school       TEXT,           -- 学校
-    grade        TEXT,           -- 受教育程度/状态
-    level        TEXT,           -- 英语程度
-    target_score REAL,           -- 目标分数
-    exam_date    TEXT,           -- 雅思实考时间
-    exam_score   REAL,           -- 雅思实考成绩
-    notes        TEXT,           -- 备注
-    updated_at   TEXT NOT NULL
-)
-```
-
-- 🟢 class_roster 数据源已收敛到 duowei（见上）
-- [ ] 所有扩展字段进 student_profile（学员全局信息，不随课程变化）
-- [ ] "已上课程"不存（从 lessons 表 JOIN 算出来）
-- [ ] 新增 Parser 解析 `.duowei` JSON，提取 records 写入 student_profile
-- [ ] Sync 监听 `.duowei` 文件变更（当前：档案页变更时读 duowei；duowei 单独变更未触发同步）
-
-**查询示例**：
-```sql
--- 学员完整档案（基本信息 + 课程历史 + 出勤/作业）
-SELECT s.name, p.school, p.grade, p.target_score, p.exam_score,
-       a.name as archive_name, l.lesson_number,
-       att.status as attendance, hw.submitted as homework
-FROM students s
-JOIN student_profile p ON s.id = p.student_id
-LEFT JOIN class_roster r ON s.id = r.student_id
-LEFT JOIN archives a ON r.archive_id = a.id
-LEFT JOIN lessons l ON a.id = l.archive_id
-LEFT JOIN attendance att ON s.id = att.student_id AND l.id = att.lesson_id
-LEFT JOIN homework hw ON s.id = hw.student_id AND l.id = hw.lesson_id
-WHERE s.id = ?
-```
 
 #### 风险
 - **duowei-table 嵌入渲染器是精简版**：嵌入视图不渲染 `colorRules`（整行条件色）、`cellStyles`（单格居中/背景）、`headerStyle`——只有全屏打开表格时生效；下拉选项的彩色 chip 在嵌入里正常显示。属插件源码限制，**后续给插件打补丁补齐**（见下方「duowei-table 嵌入渲染器补丁」条目，设计模板/样式时以彩 chip 表达关键信息）

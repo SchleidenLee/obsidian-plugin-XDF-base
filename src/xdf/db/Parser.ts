@@ -63,6 +63,28 @@ export interface HomeworkDraft {
     submitted: boolean;     // 已完成=true/未完成=false
 }
 
+/**
+ * duowei 学员表一行
+ *
+ * 按数据归属分两类：
+ * - 学员全局属性（跨班课不变）→ student_profile
+ * - 课程绑定属性（f11 结班测成绩）→ class_roster
+ * f10「已上课程」不落库（由 class_roster JOIN archives 算出）
+ */
+export interface DuoweiStudentRow {
+    name: string;                    // f1
+    ieltsNeeded: number | null;      // f2：IELTS 需求（1/0/null）
+    targetScore: number | null;      // f3：目标分数
+    examDate: string | null;         // f4：考试时间
+    examScore: number | null;        // f5：考试成绩
+    educationLevel: string | null;   // f6：受教育程度
+    educationStatus: string | null;  // f7：受教育状态
+    school: string | null;           // f8：学校
+    englishLevel: string | null;     // f9：英语程度
+    finalExamScore: number | null;   // f11：结班测成绩（与课程绑定）
+    notes: string | null;            // f12：备注
+}
+
 export interface ParsedFile {
     kind: FileKind;
     sections: SectionDraft[];
@@ -583,4 +605,112 @@ export function parseFile(
     const homework = kind === "feedback" ? parseHomework(sections) : [];
 
     return { kind, sections, checkboxes, feedbackSent, attendance, homework };
+}
+
+// ========== duowei 学员表解析 ==========
+
+type DuoweiKey =
+    | "name" | "ieltsNeeded" | "targetScore" | "examDate" | "examScore"
+    | "educationLevel" | "educationStatus" | "school" | "englishLevel"
+    | "finalExamScore" | "notes";
+
+/** 字段名 → 语义键（首选：列名，容忍重排/改 id） */
+const DUOWEI_FIELD_BY_NAME: Record<string, DuoweiKey> = {
+    "姓名": "name",
+    "IELTS需求": "ieltsNeeded",
+    "目标分数": "targetScore",
+    "考试时间": "examDate",
+    "考试成绩": "examScore",
+    "受教育程度": "educationLevel",
+    "受教育状态": "educationStatus",
+    "学校": "school",
+    "英语程度": "englishLevel",
+    "结班测成绩": "finalExamScore",
+    "备注": "notes",
+};
+
+/** 字段 id → 语义键（兜底：旧表无 fields.name 或列名被改时） */
+const DUOWEI_FIELD_BY_ID: Record<string, DuoweiKey> = {
+    f1: "name", f2: "ieltsNeeded", f3: "targetScore", f4: "examDate", f5: "examScore",
+    f6: "educationLevel", f7: "educationStatus", f8: "school", f9: "englishLevel",
+    f11: "finalExamScore", f12: "notes",
+};
+
+function duoweiText(v: unknown): string | null {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s === "" ? null : s;
+}
+
+function duoweiNum(v: unknown): number | null {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** checkbox → 1/0；未填（undefined/null）→ null（不覆盖已有值） */
+function duoweiFlag(v: unknown): number | null {
+    if (v == null) return null;
+    return v === true || v === 1 || v === "true" || v === "1" ? 1 : 0;
+}
+
+/**
+ * 解析 duowei 学员表 JSON（`.duowei`）→ 结构化行
+ *
+ * 字段映射优先按 `fields[].name`（中文列名），回退 `fields[].id`（f1~f12），
+ * 因此列顺序调整、加列都不影响；`records[].values` 以字段 id 为键。
+ * 内容非法（非 JSON / 无 records）返回空数组，不抛异常。
+ */
+export function parseDuoweiRoster(content: string): DuoweiStudentRow[] {
+    let doc: any;
+    try {
+        doc = JSON.parse(content);
+    } catch {
+        return [];
+    }
+    const fields: Array<{ id: string; name?: string }> = Array.isArray(doc?.fields) ? doc.fields : [];
+    const records: Array<{ values?: Record<string, unknown> }> = Array.isArray(doc?.records) ? doc.records : [];
+
+    // 字段 id → 语义键
+    const keyById = new Map<string, DuoweiKey>();
+    for (const f of fields) {
+        if (!f?.id) continue;
+        const key = DUOWEI_FIELD_BY_NAME[String(f.name ?? "").trim()] ?? DUOWEI_FIELD_BY_ID[f.id];
+        if (key) keyById.set(f.id, key);
+    }
+    // 无 fields 声明（异常/精简表）：直接按约定 id 解析
+    if (keyById.size === 0) {
+        for (const [id, key] of Object.entries(DUOWEI_FIELD_BY_ID)) keyById.set(id, key);
+    }
+
+    const rows: DuoweiStudentRow[] = [];
+    for (const rec of records) {
+        const values = rec?.values ?? {};
+        const pick = (key: DuoweiKey): unknown => {
+            for (const [id, k] of keyById) {
+                if (k !== key) continue;
+                const v = values[id];
+                if (v !== undefined && v !== null && v !== "") return v;
+            }
+            return undefined;
+        };
+
+        const name = duoweiText(pick("name"));
+        if (!name) continue;
+
+        rows.push({
+            name,
+            ieltsNeeded: duoweiFlag(pick("ieltsNeeded")),
+            targetScore: duoweiNum(pick("targetScore")),
+            examDate: duoweiText(pick("examDate")),
+            examScore: duoweiNum(pick("examScore")),
+            educationLevel: duoweiText(pick("educationLevel")),
+            educationStatus: duoweiText(pick("educationStatus")),
+            school: duoweiText(pick("school")),
+            englishLevel: duoweiText(pick("englishLevel")),
+            finalExamScore: duoweiNum(pick("finalExamScore")),
+            notes: duoweiText(pick("notes")),
+        });
+    }
+    return rows;
 }

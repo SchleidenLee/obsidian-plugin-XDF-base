@@ -18,7 +18,7 @@ export interface SqlDb {
 }
 
 /** 当前 schema 版本，与数据库模板.sql 末尾的 PRAGMA user_version 一致 */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** 数据库模板.sql 的内嵌副本（两处同步修改） */
 export const SCHEMA_DDL = [
@@ -66,11 +66,28 @@ export const SCHEMA_DDL = [
 )`,
 
     `CREATE TABLE IF NOT EXISTS class_roster (
-    archive_id   TEXT NOT NULL REFERENCES archives(id) ON DELETE CASCADE,
-    student_id   TEXT REFERENCES students(id),
-    student_name TEXT NOT NULL,
-    row_order    INTEGER NOT NULL,
+    archive_id       TEXT NOT NULL REFERENCES archives(id) ON DELETE CASCADE,
+    student_id       TEXT REFERENCES students(id),
+    student_name     TEXT NOT NULL,
+    row_order        INTEGER NOT NULL,
+    final_exam_score REAL,
     PRIMARY KEY (archive_id, row_order)
+)`,
+
+    // 学员全局属性（来自 duowei 学员表，与具体班课无关）
+    // 非空增量 upsert：跨班课同步时空的字段不覆盖已有非空值
+    `CREATE TABLE IF NOT EXISTS student_profile (
+    student_id       TEXT PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+    ielts_needed     INTEGER CHECK (ielts_needed IN (0, 1)),
+    target_score     REAL,
+    exam_date        TEXT,
+    exam_score       REAL,
+    education_level  TEXT,
+    education_status TEXT,
+    school           TEXT,
+    english_level    TEXT,
+    notes            TEXT,
+    updated_at       TEXT NOT NULL
 )`,
 
     // ---------- 内容层 ----------
@@ -200,6 +217,7 @@ export class SchemaManager {
             DROP TABLE IF EXISTS checkboxes;
             DROP TABLE IF EXISTS sections;
             DROP TABLE IF EXISTS files;
+            DROP TABLE IF EXISTS student_profile;
             DROP TABLE IF EXISTS class_roster;
             DROP TABLE IF EXISTS lessons;
             DROP TABLE IF EXISTS archives;

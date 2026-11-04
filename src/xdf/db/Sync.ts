@@ -25,6 +25,21 @@ const DEBOUNCE_MS = 500;
 /** 节流：两次 flush 的最小间隔（防 600ms 规律停顿节奏高频写盘） */
 const THROTTLE_MS = 2000;
 
+/**
+ * `{目录}/{档案名}学员表.duowei` → `{目录}/{档案名}.md`；非学员表返回 null
+ */
+function archivePathOfDuowei(path: string): string | null {
+    if (!path.endsWith("学员表.duowei")) return null;
+    const dirIdx = path.lastIndexOf("/");
+    const dir = dirIdx === -1 ? "" : path.substring(0, dirIdx);
+    const archiveName = path
+        .substring(dirIdx + 1)
+        .replace(/\.duowei$/, "")
+        .replace(/学员表$/, "");
+    if (!archiveName) return null;
+    return dir ? `${dir}/${archiveName}.md` : `${archiveName}.md`;
+}
+
 interface PendingEvent {
     type: "create" | "modify" | "delete" | "rename";
     path: string;        // 新路径（rename 时为新路径）
@@ -172,16 +187,23 @@ export class DBSync {
                 }
             }
 
-            // 2. 每轮 flush 用新 writer：归属映射从当前库行预热，
+            // 2. duowei 学员表变更 → 连带重写所属档案页
+            //    （名单、student_profile、class_roster.final_exam_score 都由档案写入路径统一落库）
+            for (const path of [...upsertPaths]) {
+                const archivePath = archivePathOfDuowei(path);
+                if (archivePath) upsertPaths.add(archivePath);
+            }
+
+            // 3. 每轮 flush 用新 writer：归属映射从当前库行预热，
             //    避免长命实例的映射过期（档案删除后残留死 id → FK 违规）
             const writer = new DBWriter(this.db);
 
-            // 2a. 先删后写
+            // 3a. 先删后写
             for (const path of deletedPaths) {
                 writer.removeFile(path);
             }
 
-            // 3. 快照 + 按 kind 分组（binary 附件只登记，与 md 同流程）
+            // 4. 快照 + 按 kind 分组（binary 附件只登记，与 md 同流程）
             const archiveSnaps: FileSnapshot[] = [];
             const navSnaps: FileSnapshot[] = [];
             const otherSnaps: FileSnapshot[] = [];
@@ -283,15 +305,16 @@ export class DBSync {
     }
 
     private async snapshotOf(file: TFile): Promise<FileSnapshot> {
-        const isMd = file.extension === "md";
-        const content = isMd ? await this.app.vault.cachedRead(file) : "";
+        // md 与 duowei 都是文本（duowei 是学员表 JSON，需全文参与解析）
+        const isText = file.extension === "md" || file.extension === "duowei";
+        const content = isText ? await this.app.vault.cachedRead(file) : "";
         return {
             path: file.path,
             basename: file.basename,
             content,
             mtime: Math.floor(file.stat.mtime / 1000),
             size: file.stat.size,
-            binary: !isMd,
+            binary: !isText,
         };
     }
 

@@ -9,6 +9,7 @@ import {
     parseInlineCheckboxGroups,
     parseFrontmatterBlock,
     parseFile,
+    parseDuoweiRoster,
 } from "./Parser";
 
 // ========== kind 识别 ==========
@@ -362,5 +363,86 @@ describe("parseInlineCheckboxGroups", () => {
         expect(r.checkboxes.every(c => c.source === "inline")).toBe(true);
         const attend = r.checkboxes.filter(c => c.section_path === "👤 张三/原始记录/出勤");
         expect(attend[0]).toMatchObject({ item_text: "正常", checked: true, source: "inline" });
+    });
+});
+
+// ========== duowei 学员表 ==========
+
+describe("parseDuoweiRoster", () => {
+    const doc = {
+        fields: [
+            { id: "f1", name: "姓名" },
+            { id: "f2", name: "IELTS需求" },
+            { id: "f3", name: "目标分数" },
+            { id: "f4", name: "考试时间" },
+            { id: "f5", name: "考试成绩" },
+            { id: "f6", name: "受教育程度" },
+            { id: "f7", name: "受教育状态" },
+            { id: "f8", name: "学校" },
+            { id: "f9", name: "英语程度" },
+            { id: "f10", name: "已上课程" },
+            { id: "f11", name: "结班测成绩" },
+            { id: "f12", name: "备注" },
+        ],
+        records: [
+            {
+                id: "r1",
+                values: {
+                    f1: "张三", f2: true, f3: 6.5, f4: "2026-12-01", f5: 6,
+                    f6: "高中", f7: "在读", f8: "一中", f9: "B1",
+                    f10: ["L1讲义"], f11: 78, f12: "备注A",
+                },
+            },
+            { id: "r2", values: { f1: "李四", f8: "二中" } },
+            { id: "r3", values: {} }, // 无姓名 → 跳过
+        ],
+    };
+
+    it("按列名映射全部字段", () => {
+        const rows = parseDuoweiRoster(JSON.stringify(doc));
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toMatchObject({
+            name: "张三",
+            ieltsNeeded: 1,
+            targetScore: 6.5,
+            examDate: "2026-12-01",
+            examScore: 6,
+            educationLevel: "高中",
+            educationStatus: "在读",
+            school: "一中",
+            englishLevel: "B1",
+            finalExamScore: 78,
+            notes: "备注A",
+        });
+    });
+
+    it("未填字段为 null（不覆盖已有值）；checkbox false → 0", () => {
+        const rows = parseDuoweiRoster(JSON.stringify(doc));
+        expect(rows[1]).toMatchObject({
+            name: "李四", ieltsNeeded: null, targetScore: null, school: "二中",
+            finalExamScore: null,
+        });
+        const withFalse = JSON.parse(JSON.stringify(doc));
+        withFalse.records[1].values.f2 = false;
+        expect(parseDuoweiRoster(JSON.stringify(withFalse))[1].ieltsNeeded).toBe(0);
+    });
+
+    it("列名被改 / 无 fields 时回退字段 id", () => {
+        const renamed = {
+            fields: [{ id: "f1", name: "学生姓名" }, { id: "f11", name: "结课分" }],
+            records: [{ values: { f1: "王五", f11: 88 } }],
+        };
+        const rows = parseDuoweiRoster(JSON.stringify(renamed));
+        expect(rows[0]).toMatchObject({ name: "王五", finalExamScore: 88 });
+
+        const noFields = { records: [{ values: { f1: "赵六", f8: "三中" } }] };
+        expect(parseDuoweiRoster(JSON.stringify(noFields))[0]).toMatchObject({
+            name: "赵六", school: "三中",
+        });
+    });
+
+    it("非法 JSON → 空数组（不抛异常）", () => {
+        expect(parseDuoweiRoster("{not json")).toEqual([]);
+        expect(parseDuoweiRoster("")).toEqual([]);
     });
 });

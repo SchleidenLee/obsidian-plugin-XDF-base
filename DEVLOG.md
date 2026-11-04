@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-11-04 · duowei 学员表全量入库（Schema v3：student_profile + 结班测成绩 + .duowei 增量同步）
+
+- **Schema（[Schema.ts](./src/xdf/db/Schema.ts)）**：`SCHEMA_VERSION` 2→3。新增 `student_profile` 表（主键 `student_id`，FK → `students(id) ON DELETE CASCADE`），9 列：`ielts_needed / target_score / exam_date / exam_score / education_level / education_status / school / english_level / notes`；`class_roster` 新增 `final_exam_score REAL`。迁移沿用「版本不匹配 → 清空重建」（vault 是 source of truth）。
+- **数据归属拆分**：duowei 12 列按语义分两类——学员全局属性（f2~f9、f12）进 `student_profile`，与课程/班级绑定的 f11「结班测成绩」进 `class_roster.final_exam_score`，f10「已上课程」不落库（`class_roster` JOIN `archives` 可算出）。
+- **解析（[Parser.ts](./src/xdf/db/Parser.ts)）**：新增纯函数 `parseDuoweiRoster(content)`：字段映射优先按 `fields[].name` 中文列名、回退 `f1`~`f12`（列顺序调整/改 id 不影响）；未填字段返回 `null`、checkbox `false` → `0`；非法 JSON 返回空数组不抛异常。
+- **写库（[Builder.ts](./src/xdf/db/Builder.ts)）**：`writeArchive` 读 duowei 行；班课写 `class_roster.final_exam_score` + `student_profile`，一对一取本人行写 `student_profile`。新增 `upsertStudentProfile`，采用**非空增量 upsert**（`COALESCE(excluded.x, student_profile.x)`，文本再套 `NULLIF(...,'')`）：跨班课同步时空值不覆盖已有数据，整行全空不建行。duowei 缺失（回退 md 表格）时保留 `class_roster` 已有结班测成绩，避免档案页重写抹掉成绩。旧 `parseStudentsFromDuowei` 删除，统一走 `parseDuoweiRoster`。
+- **同步（[Sync.ts](./src/xdf/db/Sync.ts)）**：`snapshotOf` 把 `.duowei` 与 `.md` 同等视为文本；`.duowei` 变更时经 `archivePathOfDuowei` 反推档案页路径并入 upsert 集合，连带重写档案（名单/属性/成绩统一由档案写入路径落库）。此前 `.duowei` 被标 binary、单独改动不触发任何 DB 更新。
+- **为什么**：duowei 已是学员信息唯一来源，但 DB 镜像只同步了姓名；学校/年级/目标分等无法查询。拆分全局属性与课程绑定属性的原因是「学校/程度跨班课不变」而「结班测成绩属于某期课程」，混在一张表会互相覆盖。
+- **验证**：WSL `vitest.xdf.config.mts` 全量重建测试 vault（4501 文件 / 63 档案 / 571 课次 / 301 学员，0 错误）：`student_profile` 正常落库；把某学员 duowei 的「学校」清空后重写档案，值保留，改非空则覆盖。`Parser.test.ts` 新增 `parseDuoweiRoster` 4 组用例（列名映射 / 空值 null / 改列名与无 fields 回退 / 非法 JSON）。注：`Builder.test.ts` 依赖的 `obsidian-plugin/Reference/current class` 目录不存在，该套件在本环境下无法运行（既有问题，与本次改动无关）。
+
+---
+
 ## 2026-11-04 · 测试项目（refined）合并回主项目 → v1.5.0
 
 - **合并来源**：`Test/base-refined/`（xdf-base-refined）→ 主项目 `obsidian-plugin-XDF-base`（xdf-base）。diff 清单驱动回写：37 个身份字面量文件批量替换 `xdf-base-refined`→`xdf-base`；测试独有文件（TplEngine.ts、templates/ 目录、DB 实体化改动）直接拷入；正式项目独有文件（AI出作业.ts、presets/通用/）按用户指示删除不保留。回滚锚 tag `pre-merge-refined` 打在合并前的 1.4.14。
