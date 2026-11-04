@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-11-04 · 测试项目（refined）合并回主项目 → v1.5.0
+
+- **合并来源**：`Test/base-refined/`（xdf-base-refined）→ 主项目 `obsidian-plugin-XDF-base`（xdf-base）。diff 清单驱动回写：37 个身份字面量文件批量替换 `xdf-base-refined`→`xdf-base`；测试独有文件（TplEngine.ts、templates/ 目录、DB 实体化改动）直接拷入；正式项目独有文件（AI出作业.ts、presets/通用/）按用户指示删除不保留。回滚锚 tag `pre-merge-refined` 打在合并前的 1.4.14。
+- **合并内容**：DB 实体化（students/attendance/homework 表、Schema v2）、duowei 学员名单接入（Builder/Sync 读 duowei）、模板释放引擎（TplEngine + templates/ 目录）、Feedback 面板锚点渲染修复（Pass 0 补空行）、collectVaultFiles 把 .duowei 识别为文本快照、档案模板占位符单花括号→双花括号。
+- **部署验证**：测试 vault 实测通过——class_roster 305 行 / 37 班全覆盖，students 305、attendance 408、homework 315；面板样式修复（根 styles.css 是旧文件，部署时须取 dist/styles.css）。
+- **发布**：bump 1.4.14 → 1.5.0，tag v1.5.0，GitHub Release 流水线自动生成（main.js / manifest.json / styles.css 三件）。
+- **已知遗留**：styles.css 根目录文件（38802 字节，9/18 旧版）与 dist/styles.css（41617 字节，编译新版）不一致——根文件未维护，部署只取 dist 产物。后续考虑删除根 styles.css 避免误用。
+
+---
+
 ## 2026-11-04 · DB 学员名单数据源收敛（Phase 3：md 表格 → duowei）
 
 - [Builder.ts](./src/xdf/db/Builder.ts)：`DBWriter` 新增 `duoweiContents` Map 和 `registerDuowei()` 方法；`rebuildAll()` 扫描 vault 时识别 `*学员表.duowei` 文件并建立 `archivePath → content` 映射；`writeArchive()` 优先从 duowei 读学员名单（`parseStudentsFromDuowei`），回退到旧的 md 表格解析（`parseStudentsFromBody`）。新增 `parseStudentsFromDuowei()` 函数：JSON 解析 duowei 文件，提取 `records[].values.f1`（姓名字段）。
