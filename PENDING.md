@@ -17,80 +17,129 @@
 
 ## 🟡 已定待做
 
-### A. 代码审查整改（严重）
+### 学员表 DB 镜像（Phase 3）：student_profile 表 + duowei Parser
 
-- [ ] **AI 产物无条件覆盖用户当前笔记** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)
-  - 现象：两个 AI 脚本读完当前笔记后直接 `await app.vault.modify(file, ...)` 把 AI 产物写回当前笔记，无备份、无预览、无二次确认（词表脚本以生成的 6 列表格整体替换原内容，作业脚本以 `result.output` 整体替换）。
-  - 影响：一旦 AI 输出异常（截断 / 乱码 / 误判素材）或用户选错目标笔记，原始内容不可逆丢失。产品方定性：词表脚本「覆盖写入当前笔记」属原设计但「可能需要再调整」，列为建议改进；`AI出作业` 上更严重（该脚本本身未完成）。
-  - 修复方向：写入前先快照原文（如同名 `.bak` 或先 `create` 为新文件），或提供「先预览再确认落盘」；至少在 `modify` 前用 `Notice` + 确认交互拦截一次。
+> Phase 1（md 表格 → duowei JSON）、Phase 2（模板/建档脚本/存量迁移）已于 2026-11-03 完成，见 DEVLOG。
+> 现状：duowei 是 source of truth；脚本经 `ArchiveUtils.parseStudentsFromArchive`（async，按字段名取 id）读 `{班号}学员表.duowei`。
 
-- [ ] **homework-ai 半成品逻辑仍随「AI 出作业」发布** — [AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)、[scriptRegistry.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/scriptRegistry.ts)
-  - 现象：`AI出作业` 脚本头自述「简化版骨架 / 完整的三阶段流水线实现留给后续」，但源文件位于 `presets/文件生成/` 会被自动清单收录，经 `SCRIPTS` 于启动时由 `ScriptReleaser` 释放到 `00.SYSTEM/xdf_base/scripts/presets/文件生成/AI出作业.js`，并经 [choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts) 进入「文件生成」文件夹菜单。产品方确认：「确实没做，每次释放确实不应该」。
-  - 影响：用户会看到并点击一个未完成的「AI 出作业」命令，得到半成品输出，且其落盘行为正好命中上一条「无条件覆盖当前笔记」，可能直接损坏笔记。
-  - 修复方向：从 `SCRIPTS` 移除该条目（菜单随目录自动消失），待流水线完成后重新登记；如必须占位，改成显式「功能未实现」提示且不落盘、不覆盖。
+**Phase 3：DB 同步 — 新建 student_profile 表**
 
-### A. 代码审查整改（高）
+> 🟢 2026-11-04 部分完成：`class_roster` 数据源已从 md 表格收敛到 duowei（`Builder.ts` 的 `writeArchive` 优先读 duowei，回退 md 表格；`Sync.ts` 增量同步时读 duowei 传给 writer）。见 DEVLOG。
 
-- [ ] **词表工具手写 JSON 清洗脆弱** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)
-  - 现象：用 `indexOf(BT)` / `lastIndexOf(BT)` 剥离反引号围栏（第 64-70 行），释义 / 例句含反引号会被截断；用 `indexOf("[")` / `lastIndexOf("]")` 夹取数组（第 71-74 行），前后杂文字的括号会误伤；解析后仅 `Array.isArray(entries)` 校验（第 80 行），不校验元素结构；渲染用 `e.word || ""` 等静默兜底（第 92-96 行）。产品方确认需整改。
-  - 影响：模型输出稍偏离约定就会解析失败或渲染空白单元格，静默兜底吞掉结构化错误，用户看到「成功」但内容残缺。
-  - 修复方向：改为模型结构化输出（见 B），把解析与校验交给 `parseStructured`/`validateValue`，失败显式报错、不落盘；仅保留最小文本兜底（去围栏 + 长度校验）应对上游不支持 `response_format` 的情况。
+```sql
+student_profile (
+    student_id   TEXT PRIMARY KEY REFERENCES students(id),
+    school       TEXT,           -- 学校
+    grade        TEXT,           -- 受教育程度/状态
+    level        TEXT,           -- 英语程度
+    target_score REAL,           -- 目标分数
+    exam_date    TEXT,           -- 雅思实考时间
+    exam_score   REAL,           -- 雅思实考成绩
+    notes        TEXT,           -- 备注
+    updated_at   TEXT NOT NULL
+)
+```
+
+- 🟢 class_roster 数据源已收敛到 duowei（见上）
+- [ ] 所有扩展字段进 student_profile（学员全局信息，不随课程变化）
+- [ ] "已上课程"不存（从 lessons 表 JOIN 算出来）
+- [ ] 新增 Parser 解析 `.duowei` JSON，提取 records 写入 student_profile
+- [ ] Sync 监听 `.duowei` 文件变更（当前：档案页变更时读 duowei；duowei 单独变更未触发同步）
+
+**查询示例**：
+```sql
+-- 学员完整档案（基本信息 + 课程历史 + 出勤/作业）
+SELECT s.name, p.school, p.grade, p.target_score, p.exam_score,
+       a.name as archive_name, l.lesson_number,
+       att.status as attendance, hw.submitted as homework
+FROM students s
+JOIN student_profile p ON s.id = p.student_id
+LEFT JOIN class_roster r ON s.id = r.student_id
+LEFT JOIN archives a ON r.archive_id = a.id
+LEFT JOIN lessons l ON a.id = l.archive_id
+LEFT JOIN attendance att ON s.id = att.student_id AND l.id = att.lesson_id
+LEFT JOIN homework hw ON s.id = hw.student_id AND l.id = hw.lesson_id
+WHERE s.id = ?
+```
+
+#### 风险
+- **duowei-table 嵌入渲染器是精简版**：嵌入视图不渲染 `colorRules`（整行条件色）、`cellStyles`（单格居中/背景）、`headerStyle`——只有全屏打开表格时生效；下拉选项的彩色 chip 在嵌入里正常显示。属插件源码限制，**后续给插件打补丁补齐**（见下方「duowei-table 嵌入渲染器补丁」条目，设计模板/样式时以彩 chip 表达关键信息）
+- duowei 插件未安装时，嵌入块显示为普通文件链接（降级体验）
+- duowei JSON schema 如果插件升级变了，需要适配
+
+---
+
+### duowei-table 嵌入渲染器补丁（后续必做）
+
+背景：`![[xxx.duowei]]` 嵌入走的是 `DuoweiEmbedChild` 精简渲染器（main.js L24485 起），与全屏打开用的完整网格渲染器是两套独立代码路径，嵌入视图缺失以下格式（已源码定位）：
+
+| 缺失格式 | 主视图实现位置 | 嵌入侧现状 |
+|----------|----------------|-----------|
+| 整行条件色 `colorRules` | L14285 `recordRuleColor` | 行循环 L24704-24713 未调用 |
+| 单格样式 `cellStyles`（居中/背景/字色） | L14375-14383 | `renderEmbedCell` L25241 完全不读 |
+| 表头样式 `headerStyle` | 完整网格 | 嵌入 thead 只渲染字段名 |
+
+- [ ] **给嵌入渲染器补齐 cellStyles / colorRules / headerStyle**（L24704 行循环 + `renderEmbedCell` 各加对现有函数的复用，主视图逻辑可直接引用）
+- [ ] 决定补丁载体：fork 维护 patched 版本（仓库已拉到 `references/duowei-table`）vs 就地 patch vault 内 main.js（插件更新后需重打）
+- [ ] 补丁完成后：确认嵌入里 `cellStyles['align']` 生效的形式（class `is-align-center` 已有对应 CSS）
+- 嵌入渲染器已支持且无需补：数据、排序、搜索、筛选、下拉选项彩色 chip、checkbox（嵌入里禁用编辑态）
+
+---
 
 ### A. 代码审查整改（中）
 
-- [ ] **对 `TFile[]` 调用 `sort()` 未传比较器** — [周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/行政工作/例会添加页面.ts)
+- [ ] **对 `TFile[]` 调用 `sort()` 未传比较器** — [周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/presets/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/presets/行政工作/例会添加页面.ts)
   - 现象：两处对 `.getMarkdownFiles()` 过滤后的数组直接 `.sort().reverse()`，`sort()` 走默认字符串（UTF-16 码元）排序。
   - 影响：中文与序号在字典序下未必符合预期（尤其多位数字序号），影响默认选中项与展示顺序。
   - 修复方向：显式传比较器（按路径 `localeCompare` 或按解析出的序号数值），并明确升降序意图。
 
-- [ ] **sql.js 数据库写盘非原子** — [Connection.ts:127-144](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts#L127-L144)
+- [ ] **sql.js 数据库写盘非原子** — [Connection.ts:127-144](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/db/Connection.ts#L127-L144)
   - 现象：`save()` 直接 `adapter.writeBinary(this.dbPath, data)` 整体覆盖 `.xdf/xdf.db`，未先写临时文件再原子替换。
   - 影响：写盘中断可能留下半截损坏的库文件，下次启动 `initialize()` 可能抛错或读到不一致状态。
   - 修复方向：改为「先写临时路径 → 成功后 rename 覆盖」；或写前备份上一版本，失败可回滚。
 
-- [ ] **frontmatter `status` 用无边界正则替换** — [XdfBaseExtension.ts:220-223](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L220-L223)
+- [ ] **frontmatter `status` 用无边界正则替换** — [XdfBaseExtension.ts:220-223](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/XdfBaseExtension.ts#L220-L223)
   - 现象：`relocateArchive` 用 `new RegExp("status:\\s*[\"']?" + fromStatus + "[\"']?")` 就地替换 `status`，正则无行首 / 行尾边界。
   - 影响：正文或其他 frontmatter 字段中若出现同样的 `status: active` / `status: archived` 片段，可能被误替换（替换第一处匹配）。
   - 修复方向：限定匹配到 frontmatter 块内并加边界（`^status:` + 行尾锚定、`m` 多行标志），或改用 YAML 解析 / 写回。
 
-- [ ] **数据库 `clear()` 失败后状态不一致** — [Connection.ts:161-173](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts#L161-L173)
+- [ ] **数据库 `clear()` 失败后状态不一致** — [Connection.ts:161-173](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/db/Connection.ts#L161-L173)
   - 现象：`clear()` 先关旧连接、再建新空库并置 `dirty = true`、然后 `save()`；若 `save()` 抛错，内存已是空库但磁盘仍是旧库，且旧连接已关闭。
   - 影响：清库中途失败会进入内存 / 磁盘状态分裂，后续读写基于空库、旧数据未真正清掉。
   - 修复方向：`save()` 失败时回滚内存状态（重新加载磁盘库）或明确进入错误态并提示。
 
 ### A. 代码审查整改（低）
 
-- [ ] **启动同步 Choice 绕过防抖保存** — [XdfBaseExtension.ts:68-70](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L68-L70) → 复查启动时序，必要时与统一保存通道对齐或串行化，避免并发写 `data.json`。
-- [ ] **模板缺失时 `SingleTemplateEngine` 返回空串不报错** — [SingleTemplateEngine.ts:38-40](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/engine/SingleTemplateEngine.ts#L38-L40) → 按「模板缺失」抛出可识别错误，让调用方决定是否中止写入。
-- [ ] **`AIAssistant` Notice 定时器未清理** — [AIAssistant.ts:342,347](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/ai/AIAssistant.ts#L342) → 保存 `setTimeout` 句柄，结束 / 销毁时 `clearTimeout`。
-- [ ] **`Sync.ts` 中 create/modify 事件语义混淆** — [Sync.ts:101-104](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Sync.ts#L101-L104) → 分别注册两个处理函数或在 `handleEvent` 透传真实事件类型，保留 create/modify 语义。
-- [ ] **授课布局重复点击累积 popout 窗口** — [XdfBaseExtension.ts:237-279](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L237-L279) → 复用已有 popout（查 `getLeavesOfType` / 已存在的 popout leaf），或明确其为「另开窗口」的一次性操作。
+- [ ] **启动同步 Choice 绕过防抖保存** — [XdfBaseExtension.ts:68-70](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/XdfBaseExtension.ts#L68-L70) → 复查启动时序，必要时与统一保存通道对齐或串行化，避免并发写 `data.json`。
+- [ ] **模板缺失时 `SingleTemplateEngine` 返回空串不报错** — [SingleTemplateEngine.ts:38-40](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/engine/SingleTemplateEngine.ts#L38-L40) → 按「模板缺失」抛出可识别错误，让调用方决定是否中止写入。
+- [ ] **`AIAssistant` Notice 定时器未清理** — [AIAssistant.ts:342,347](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/ai/AIAssistant.ts#L342) → 保存 `setTimeout` 句柄，结束 / 销毁时 `clearTimeout`。
+- [ ] **`Sync.ts` 中 create/modify 事件语义混淆** — [Sync.ts:101-104](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/db/Sync.ts#L101-L104) → 分别注册两个处理函数或在 `handleEvent` 透传真实事件类型，保留 create/modify 语义。
+- [ ] **授课布局重复点击累积 popout 窗口** — [XdfBaseExtension.ts:237-279](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/XdfBaseExtension.ts#L237-L279) → 复用已有 popout（查 `getLeavesOfType` / 已存在的 popout leaf），或明确其为「另开窗口」的一次性操作。
 
 ### A. 代码审查整改（设计如此 / 非问题，不整改）
 
 以下两项经产品方确认属故意设计，记录风险但本期不整改：
 
-- **每次启动无条件覆盖预设脚本与 Choice — 设计如此，非问题。** 产品方说明：启动时对 `SCRIPTS` / 按目录生成的 QuickAdd 分组清单内文件做全量覆盖，目的是让内置脚本 / 菜单随插件升级自动送达老师端；用户自建脚本不在清单内不会被触碰（见 [ScriptReleaser.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/ScriptReleaser.ts)、[choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/choiceManager.ts)）。记录风险：老师若直接改预设脚本文件，改动会在下次启动被覆盖，此风险已被接受。
+- **每次启动无条件覆盖预设脚本与 Choice — 设计如此，非问题。** 产品方说明：启动时对 `SCRIPTS` / 按目录生成的 QuickAdd 分组清单内文件做全量覆盖，目的是让内置脚本 / 菜单随插件升级自动送达老师端；用户自建脚本不在清单内不会被触碰（见 [ScriptReleaser.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/ScriptReleaser.ts)、[choiceManager.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/choiceManager.ts)）。记录风险：老师若直接改预设脚本文件，改动会在下次启动被覆盖，此风险已被接受。
 - **用 `new Function` 执行 vault 内 JS — 设计如此，非问题。** 产品方说明：脚本以字符串形式存于 vault、由 QuickAdd 执行时求值运行，配套代码阅读器插件阅读，脚本目录为 `.xdf` / `00.SYSTEM` 等不入库路径，属既定可扩展机制。记录风险：执行 vault 内可写 JS 存在安全边界，产品方已知悉并接受。**代码位置 [待确认]**：本次在 `src/` 内未定位到直接调用点（求值发生在 QuickAdd 主流程 / 运行时）。
 
 ### B. 结构化输出改造（重点）
 
 背景：目标模型（v4.1 flash）支持结构化输出，把词表脚本现有的「手写解析 LLM 输出」改为「模型结构化输出 + 显式校验」。
 
-- **现状** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/文件生成/词表工具.ts)
+- **现状** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/presets/文件生成/词表工具.ts)
   - 脚本用自然语言要求模型「只输出 JSON 数组，不要 markdown 代码块标记」，再调 `quickAddApi.ai.prompt(prompt, undefined, { systemPrompt, modelOptions: { temperature: 0.2 } })`。
-  - 经核实，`ai.prompt` 的 `settings.modelOptions` 类型为 `Partial<OpenAIModelParameters>`（[quickAddApi.ts:510](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/quickAddApi.ts#L510)；类型定义 [OpenAIModelParameters.ts:6-23](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/ai/OpenAIModelParameters.ts#L6-L23) 仅有 `temperature` / `top_p` / `frequency_penalty` / `presence_penalty`），**无法透传 `response_format`**。整条链路（`quickAddApi` → `Prompt()` → `OpenAIRequest`）都没有 `responseFormat` 入口，故脚本只能靠提示词约束格式、被迫手写清洗。
+  - 经核实，`ai.prompt` 的 `settings.modelOptions` 类型为 `Partial<OpenAIModelParameters>`（[quickAddApi.ts:510](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/quickAddApi.ts#L510)；类型定义 [OpenAIModelParameters.ts:6-23](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/ai/OpenAIModelParameters.ts#L6-L23) 仅有 `temperature` / `top_p` / `frequency_penalty` / `presence_penalty`），**无法透传 `response_format`**。整条链路（`quickAddApi` → `Prompt()` → `OpenAIRequest`）都没有 `responseFormat` 入口，故脚本只能靠提示词约束格式、被迫手写清洗。
 
 - **底层能力已存在（可直接复用）**
-  - [providerToolMapping.ts:151-166](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/ai/tools/providerToolMapping.ts#L151-L166)：`buildOpenAIBody` 已支持 `req.responseFormat`——有 schema 时构造 `response_format: { type: "json_schema", json_schema: { name, strict, schema } }` 并对 schema 走 `injectStrictObjectSchema`，无 schema 时退化为 `{ type: "json_object" }`。
-  - [Agent.ts:555-573](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/ai/tools/Agent.ts#L555-L573)：已有 `parseStructured(text, schema)`（先 `stripCodeFences` 再 `JSON.parse`，再 `validateValue`）、`stripCodeFences`、`validateValue`，并配有一次「更严格重问」的修复回路。
+  - [providerToolMapping.ts:151-166](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/ai/tools/providerToolMapping.ts#L151-L166)：`buildOpenAIBody` 已支持 `req.responseFormat`——有 schema 时构造 `response_format: { type: "json_schema", json_schema: { name, strict, schema } }` 并对 schema 走 `injectStrictObjectSchema`，无 schema 时退化为 `{ type: "json_object" }`。
+  - [Agent.ts:555-573](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/ai/tools/Agent.ts#L555-L573)：已有 `parseStructured(text, schema)`（先 `stripCodeFences` 再 `JSON.parse`，再 `validateValue`）、`stripCodeFences`、`validateValue`，并配有一次「更严格重问」的修复回路。
   - 即：请求构造、围栏剥离、schema 校验、失败修复都已在 `ai/tools` 内实现，缺的是「脚本侧调用 `ai.prompt` 也能带 schema」这条通道。
 
 - **改造路线（建议，按依赖排序）**
   1. (a) 打通透传：扩展 `ai.prompt` 的 settings → `Prompt` 的 `PromptParams` → `OpenAIRequest` → `buildChatBody` 增加可选 `responseFormat` 透传；保持旧调用方行为不变（新增字段可选）。
   2. (b) 脚本侧声明词条 schema（顶层 object，`strict: true` + `additionalProperties: false`），用 `parseStructured` / `validateValue` 校验；**校验失败显式报错、不落盘、不覆盖笔记**。
   3. (c) 保留文本兜底：上游不支持 `response_format` 时退化为「去围栏 + `JSON.parse` + 长度 / 元素结构校验」，即把现有手写清洗收敛为最小兜底路径，失败同样显式报错。
-  4. (d) 与「AI 产物无条件覆盖当前笔记」（A 严重第 1 条）联动：结构化校验通过后仍应先预览 / 备份再落盘。
 
 - **兼容性**：需实测目标模型（v4.1 flash）是否支持 `json_schema` 与 `strict`；不支持时退化为 `json_object` 或纯文本兜底（路线 c）。
 
@@ -101,7 +150,7 @@
 - [ ] **添加 Banner**：`⚡ XDF Base` + 副标题「QuickAdd 脚本引擎 + AI 调用」。
 - [ ] **设置分区**：首页放高频项（选项列表）；「高级设置」折叠区放 AI 助手 / 数据库 / 打包。
 - [ ] **添加 Footer**：版本号 + 作者（Schleiden）。
-- 改动文件：[quickAddSettingsTab.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/quickAddSettingsTab.ts)（添加 Banner / Footer，调整分组返回结构）；样式可加在 `src/styles.css`。
+- 改动文件：[quickAddSettingsTab.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/quickAddSettingsTab.ts)（添加 Banner / Footer，调整分组返回结构）；样式可加在 `src/styles.css`。
 
 ---
 
@@ -111,6 +160,6 @@
 
 现状评估：整体模块划分清晰（scripts / db 独立），但 `XdfBaseExtension.ts` 承担了过多实现细节：应只负责「什么时候调谁」，而非「怎么做」。不是烂代码，但加新功能时不抽离会持续膨胀。
 
-- [ ] **拆分 `reconcileOnStartup` 上帝函数（63 行）** — 扫描 vault、过滤、查 DB、对比 mtime、空库重建、增量补写、错误日志全塞在一起 → 新建 `src/xdf/db/Reconciler.ts`，Extension 只调 `await new Reconciler(app, db).run()`。当前实现见 [XdfBaseExtension.ts:287-349](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L287-L349)。
-- [ ] **拆离右键菜单耦合** — 归档 / 恢复与授课布局写在同一个 `file-menu` 回调中，控制流互相牵制；应各自注册监听器，或抽成 `registerArchiveMenu()` / `registerTeachingLayoutMenu()`（分别独立判断、独立 return）。建议新建 `src/xdf/menus/archiveMenu.ts`、`src/xdf/menus/teachingLayoutMenu.ts`。当前实现见 [XdfBaseExtension.ts:111-179](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts#L111-L179)。
+- [ ] **拆分 `reconcileOnStartup` 上帝函数（63 行）** — 扫描 vault、过滤、查 DB、对比 mtime、空库重建、增量补写、错误日志全塞在一起 → 新建 `src/xdf/db/Reconciler.ts`，Extension 只调 `await new Reconciler(app, db).run()`。当前实现见 [XdfBaseExtension.ts:287-349](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/XdfBaseExtension.ts#L287-L349)。
+- [ ] **拆离右键菜单耦合** — 归档 / 恢复与授课布局写在同一个 `file-menu` 回调中，控制流互相牵制；应各自注册监听器，或抽成 `registerArchiveMenu()` / `registerTeachingLayoutMenu()`（分别独立判断、独立 return）。建议新建 `src/xdf/menus/archiveMenu.ts`、`src/xdf/menus/teachingLayoutMenu.ts`。当前实现见 [XdfBaseExtension.ts:111-179](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/XdfBaseExtension.ts#L111-L179)。
 - [ ] **`relocateArchive` 下沉到脚本工具库** — 读 settings、拼路径、`vault.rename`、改 frontmatter 都属归档业务逻辑，应移到 `archive-utils.ts`，Extension 只调 `await archiveTo(folder, page, 'archived', settings)`。

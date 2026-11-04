@@ -1,4 +1,4 @@
-import type {
+﻿import type {
 	App,
 	Setting,
 	SettingDefinitionGroup,
@@ -191,6 +191,19 @@ export class QuickAddSettingsTab extends PluginSettingTab {
 					name: "行政文件夹",
 					desc: "行政管理类文件的存放位置。",
 					render: (setting) => this.renderFolderPathInput(setting, "admin"),
+				},
+				{
+					name: "模板来源",
+					desc: "build-in = 内置模板（每次启动覆盖）；customized = 自定义模板（首次从内置拷贝，之后不再动）",
+					control: {
+						type: "dropdown",
+						key: "templateSource",
+						defaultValue: "build-in",
+						options: {
+							"build-in": "build-in（内置）",
+							customized: "customized（自定义）",
+						},
+					},
 				},
 			],
 		};

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 两段式脚本：周例会建档
  * 释放到 00.SYSTEM/xdf_base/scripts/presets/行政工作/周例会建档.js
  *
@@ -19,11 +19,20 @@ export const PANEL_MEETING_SETUP_SCRIPT = String.raw`/**
  * entry  ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
 const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
+const UTILS_PATH = "00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js";
 
 function loadRuntime() {
     return app.vault.adapter.read(RUNTIME_PATH).then(function (code) {
         const mod = { exports: {} };
         new Function("module", "exports", "app", code)(mod, mod.exports, app);
+        return mod.exports;
+    });
+}
+
+function loadUtils(ctx) {
+    return ctx.app.vault.adapter.read(UTILS_PATH).then(function (code) {
+        const mod = { exports: {} };
+        new Function("module", "exports", "app", code)(mod, mod.exports, ctx.app);
         return mod.exports;
     });
 }
@@ -118,6 +127,8 @@ const MOD = {
         const season = params.season;
         if (!season) return;
 
+        const U = await loadUtils(ctx);
+
         // ---------- 路径 ----------
         const { startYear } = parseFy(fy);
         const section = season === "秋季" ? 1 : 2;
@@ -140,7 +151,12 @@ const MOD = {
             return;
         }
 
-        const content = [
+        // frontmatter 留代码（协议字段）；正文走模板
+        const navBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{seasonFolderName}.md",
+            { fy: fy, seasonFolderName: seasonFolderName }
+        );
+        const navContent = [
             "---",
             "fiscal_year: " + fy,
             "section: " + section,
@@ -151,15 +167,11 @@ const MOD = {
             '  - "#周例会"',
             "---",
             "",
-            "## 📌 本学期任务与侧重点",
-            "",
-            "",
-            "## 📚 会议索引",
-            "",
+            navBody
         ].join("\n");
 
         try {
-            await ctx.app.vault.create(navPath, content);
+            await ctx.app.vault.create(navPath, navContent);
             ctx.notice("✅ 周例会导航页已创建：" + navPath);
         } catch (err) {
             ctx.notice("❌ 创建失败：" + err);
@@ -168,6 +180,9 @@ const MOD = {
         // ---------- 同步创建「总结会」 ----------
         const summaryDate = params.summaryDate;
         if (!summaryDate) return;
+
+        // frontmatter 用带时间的 ISO（15:30 例会时间，+08:00 本地）；文件夹名只带日期
+        const summaryDtISO = summaryDate + "T15:30:00+08:00";
 
         const summaryFolderName = summaryDate + " 总结会";
         const summaryFolderPath = seasonFolder + "/" + summaryFolderName;
@@ -185,10 +200,14 @@ const MOD = {
             return;
         }
 
-        // 首页
+        // 首页（frontmatter 留代码；正文走模板）
+        const summaryHomeBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/首页.md",
+            { fy: fy, seasonFolderName: seasonFolderName, date: summaryDate, n: 1 }
+        );
         const summaryHome = [
             "---",
-            "date: " + summaryDate,
+            "date: " + summaryDtISO,
             "meeting_number: 1",
             "fiscal_year: " + fy,
             "section: " + section,
@@ -198,24 +217,18 @@ const MOD = {
             '  - "#总结会"',
             "---",
             "",
-            "## 📂 本次会议文件",
-            "",
-            "- [[会议记录|📋 会议记录]]",
-            "- [[教研笔记|🔬 教研笔记]]",
-            "",
-            "## ✅ 待办",
-            "",
-            "- [ ] 发送周报到钉钉",
-            "",
-            "## 📝 备注",
-            "",
+            summaryHomeBody
         ].join("\n");
         await ctx.app.vault.create(summaryHomePath, summaryHome);
 
-        // 会议记录
+        // 会议记录（frontmatter 留代码；正文走模板）
+        const summaryRecordBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/会议记录.md",
+            { fy: fy, seasonFolderName: seasonFolderName, date: summaryDate, n: 1 }
+        );
         const summaryRecord = [
             "---",
-            "date: " + summaryDate,
+            "date: " + summaryDtISO,
             "meeting_number: 1",
             "tags:",
             '  - "#行政"',
@@ -223,24 +236,18 @@ const MOD = {
             '  - "#总结会"',
             "---",
             "",
-            "## 本周工作",
-            "",
-            "",
-            "## 学生情况",
-            "",
-            "",
-            "## 问题与协调",
-            "",
-            "",
-            "## 下周计划",
-            "",
+            summaryRecordBody
         ].join("\n");
         await ctx.app.vault.create(summaryFolderPath + "/会议记录.md", summaryRecord);
 
-        // 教研笔记
+        // 教研笔记（frontmatter 留代码；正文走模板）
+        const summaryResearchBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/教研笔记.md",
+            { fy: fy, seasonFolderName: seasonFolderName, date: summaryDate, n: 1 }
+        );
         const summaryResearch = [
             "---",
-            "date: " + summaryDate,
+            "date: " + summaryDtISO,
             "meeting_number: 1",
             "tags:",
             '  - "#教研"',
@@ -248,14 +255,7 @@ const MOD = {
             '  - "#总结会"',
             "---",
             "",
-            "## 主题",
-            "",
-            "",
-            "## 内容纪要",
-            "",
-            "",
-            "## 要点总结",
-            "",
+            summaryResearchBody
         ].join("\n");
         await ctx.app.vault.create(summaryFolderPath + "/教研笔记.md", summaryResearch);
 

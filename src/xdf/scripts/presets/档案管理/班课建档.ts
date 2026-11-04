@@ -1,4 +1,4 @@
-/**
+﻿﻿/**
  * 两段式脚本：班课建档
  * 释放到 00.SYSTEM/xdf_base/scripts/presets/档案管理/班课建档.js
  *
@@ -228,11 +228,20 @@ const MOD = {
             }));
             const body = U.buildArchiveBody({
                 kind: "class",
-                students: students
+                archiveName: className,
+                courseType: courseType
             });
             const archiveFilePath = U.joinPath(classFolderPath, className + ".md");
             const action = await U.writeIfNotExists(archiveFilePath, frontmatter + body);
             if (action === "created") ctx.notice("📄 班级主页已创建");
+
+            // 学员表（duowei）：source of truth，与档案页同目录 [{班号}学员表.duowei]
+            const dwPath = U.rosterDuoweiPath(archiveFilePath);
+            const dwAction = await U.writeIfNotExists(dwPath, JSON.stringify(
+                U.buildRosterDuoweiDoc(className, students.map(function (name) {
+                    return { values: { f1: name } };
+                })), null, 2));
+            ctx.notice(dwAction === "created" ? "📊 学员表已创建" : "📊 学员表已存在（不覆盖你的数据）");
 
             await U.openFile(archiveFilePath, true);
             ctx.notice("✅ 班级 \"" + className + "\" 创建完成！");

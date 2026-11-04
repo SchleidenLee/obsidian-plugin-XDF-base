@@ -1,4 +1,4 @@
-/**
+﻿﻿/**
  * 两段式脚本：班课每课记录
  * 释放到 00.SYSTEM/xdf_base/scripts/presets/档案管理/班课每课记录.js
  *
@@ -161,7 +161,7 @@ const MOD = {
             const parentFolder = archiveFile.parent.path;
             const lessonNumber = U.getNextLessonNumber(parentFolder);
             const needSendFeedback = scheduleType === "weekend" || lessonNumber % 2 === 0;
-            const students = U.parseStudentsFromArchive(archiveFile, content);
+            const students = await U.parseStudentsFromArchive(archiveFile);
 
             const pkg = await U.writeLessonPackage({
                 kind: "class",
@@ -177,6 +177,20 @@ const MOD = {
                 overwrite: false,
                 students: students
             });
+
+            // 作业收集夹：第 2 课起建 "Homework Check (n-1)/"（本课批改上一次作业，收其图片）
+            // ——"Homework n.md"是出题（布置档），"Homework Check n/"是交的作业（收集夹），Check 区分身份
+            const hwNumber = U.getHomeworkNumber(lessonNumber);
+            if (hwNumber) {
+                const hwBase = pkg.folderPath + "/Homework Check " + hwNumber;
+                try { await ctx.app.vault.createFolder(hwBase); } catch (e) { /* 已存在 */ }
+                for (let i = 0; i < students.length; i++) {
+                    const s = students[i];
+                    const stName = (typeof s === "string") ? s : s.name || "";
+                    if (!stName) continue;
+                    try { await ctx.app.vault.createFolder(hwBase + "/" + stName); } catch (e) { /* 已存在 */ }
+                }
+            }
 
             await U.updateArchiveAfterLesson({
                 archiveFile: archiveFile,

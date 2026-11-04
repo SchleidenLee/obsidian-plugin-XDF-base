@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 单行 checkbox 组渲染（方案 B 契约的渲染层）
  *
  * 契约（见 archive-utils.ts buildPersonFeedback 注释）：

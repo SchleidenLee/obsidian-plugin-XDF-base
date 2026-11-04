@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Vault 事件监听 + 增量同步
  *
  * 职责：
@@ -204,6 +204,16 @@ export class DBSync {
 
             // 4. 写入顺序 = 归属链依赖顺序：档案 → nav → 其余
             //    （nav 的 archive_id 查映射需要档案已写；其余文件的 lesson_id 需要 nav 已写）
+            // 4a. 档案页变更时，读对应的 duowei 文件（学员名单）传给 writer
+            for (const s of archiveSnaps) {
+                const dir = s.path.substring(0, s.path.lastIndexOf("/"));
+                const duoweiPath = `${dir}/${s.basename}学员表.duowei`;
+                const duoweiFile = this.app.vault.getAbstractFileByPath(duoweiPath);
+                if (duoweiFile instanceof TFile) {
+                    const content = await this.app.vault.cachedRead(duoweiFile);
+                    writer.registerDuowei(s.path, content);
+                }
+            }
             const archiveFolders = new Set<string>();
             for (const s of archiveSnaps) {
                 const stats = writer.upsertFile(s);
@@ -221,7 +231,7 @@ export class DBSync {
             for (const s of navSnaps) {
                 const stats = writer.upsertFile(s);
                 if (stats.errors.length > 0) {
-                    console.error("[XDF-Base] 增量写入失败（nav）:", stats.errors);
+                    console.error("[xdf-base] 增量写入失败（nav）:", stats.errors);
                     for (const e of stats.errors) {
                         void appendDbLog(this.app, {
                             level: "error", source: "DB同步",
@@ -257,7 +267,7 @@ export class DBSync {
 
             await this.db.save();
         } catch (err) {
-            console.error("[XDF-Base] DB 增量同步失败:", err);
+            console.error("[xdf-base] DB 增量同步失败:", err);
             void appendDbLog(this.app, {
                 level: "error",
                 source: "DB同步",

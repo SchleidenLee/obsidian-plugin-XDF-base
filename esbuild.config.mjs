@@ -61,7 +61,7 @@ const options = Object.freeze({
 		...builtinModules,
 	],
 	mainFields: ["svelte", "browser", "module", "main"],
-	loader: { ".wasm": "binary" },
+	loader: { ".wasm": "binary", ".md": "text" },
 	plugins: [
 		esbuildSvelte({
 			compilerOptions: { css: "injected" },

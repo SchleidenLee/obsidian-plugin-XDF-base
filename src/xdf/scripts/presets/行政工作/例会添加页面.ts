@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 两段式脚本：例会添加页面
  * 释放到 00.SYSTEM/xdf_base/scripts/presets/行政工作/例会添加页面.js
  *
@@ -13,11 +13,20 @@ export const PANEL_MEETING_ADD_PAGE_SCRIPT = String.raw`/**
  * entry   ：QuickAdd 原生入口（载入共享 runtime，顺序跑 collect → execute）
  */
 const RUNTIME_PATH = "00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js";
+const UTILS_PATH = "00.SYSTEM/xdf_base/scripts/assets/ArchiveUtils.js";
 
 function loadRuntime() {
     return app.vault.adapter.read(RUNTIME_PATH).then(function (code) {
         const mod = { exports: {} };
         new Function("module", "exports", "app", code)(mod, mod.exports, app);
+        return mod.exports;
+    });
+}
+
+function loadUtils(ctx) {
+    return ctx.app.vault.adapter.read(UTILS_PATH).then(function (code) {
+        const mod = { exports: {} };
+        new Function("module", "exports", "app", code)(mod, mod.exports, ctx.app);
         return mod.exports;
     });
 }
@@ -104,6 +113,8 @@ const MOD = {
         const type = String(params.pageType || "");
         if (!type) return;
 
+        const U = await loadUtils(ctx);
+
         const meetingFolder = homeFile.parent;
         const meetingName = meetingFolder.name;
         const dateStr = meetingName.slice(0, 10);
@@ -120,9 +131,18 @@ const MOD = {
             return;
         }
 
+        // 小节块 = 正文骨架，从模板取（{{sectionBlocks}} 由代码按 PAGES 配置拼出）
+        const sectionBlocks = sections
+            .flatMap(function (s) { return ["## " + s, "", ""]; })
+            .join("\n");
+        const body = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/活动页.md",
+            { seasonFolderName: meetingFolder.parent.name, date: dateStr, n: meetingNumber, sectionBlocks: sectionBlocks }
+        );
+
         const content = [
             "---",
-            "date: " + dateStr,
+            "date: " + dateStr + "T15:30:00+08:00",
             "meeting_number: " + meetingNumber,
             "type: " + type,
             "tags:",
@@ -130,7 +150,7 @@ const MOD = {
             '  - "#周例会"',
             "---",
             "",
-            ...sections.flatMap(function (s) { return ["## " + s, "", ""]; }),
+            body,
         ].join("\n");
         await ctx.app.vault.create(pagePath, content);
 

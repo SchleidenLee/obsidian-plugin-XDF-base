@@ -1,4 +1,4 @@
-/**
+﻿/**
  * XDF 共享脚本运行时（双入口）
  * 释放到 00.SYSTEM/xdf_base/scripts/assets/XdfRuntime.js
  *

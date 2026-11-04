@@ -1,4 +1,4 @@
-/**
+﻿﻿/**
  * 两段式脚本：一对一建档
  * 释放到 00.SYSTEM/xdf_base/scripts/presets/档案管理/一对一建档.js
  *
@@ -243,6 +243,12 @@ const MOD = {
             });
             const action = await U.writeOrUpdateFile(archiveFilePath, frontmatter + body);
             ctx.notice("✅ 档案已" + (action === "created" ? "创建" : "更新") + "：" + archiveFilePath);
+
+            // 学员表（duowei）：source of truth，与档案页同目录 [{学员名}学员表.duowei]，只建不覆
+            const dwPath = U.rosterDuoweiPath(archiveFilePath);
+            const dwAction = await U.writeIfNotExists(dwPath, JSON.stringify(
+                U.buildRosterDuoweiDoc(studentName, [{ values: { f1: studentName } }]), null, 2));
+            ctx.notice(dwAction === "created" ? "📊 学员表已创建" : "📊 学员表已存在（不覆盖你的数据）");
 
             await U.openFile(archiveFilePath);
         } catch (err) {

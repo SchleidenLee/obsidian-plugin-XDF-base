@@ -1,4 +1,4 @@
-import type { Model, ModelRef } from "./ai/Provider";
+﻿import type { Model, ModelRef } from "./ai/Provider";
 import { DefaultProviders, type AIProvider } from "./ai/Provider";
 import type IChoice from "./types/choices/IChoice";
 import { DEFAULT_DATE_ALIASES } from "./utils/dateAliases";
@@ -73,6 +73,8 @@ export interface QuickAddSettings {
 		* 只影响脚本面板列表，不影响 ScriptReleaser 释放与 QuickAdd 菜单。
 		*/
 	xdfPanelScriptSources: string[];
+	/** 模板来源：build-in（每次启动覆盖）或 customized（用户自定义） */
+	templateSource: "build-in" | "customized";
 	ai: {
 		// Either a configured model's name or the "Ask me" sentinel. Model["name"]
 		// is `string`, which already covers the sentinel — adding `| "Ask me"` would
@@ -146,6 +148,7 @@ export const DEFAULT_SETTINGS: QuickAddSettings = {
 	},
 	// XDF：面板默认只扫内置 presets，自定义来源由老师在设置页追加
 	xdfPanelScriptSources: [],
+	templateSource: "build-in",
 	ai: {
 		// XDF：脚本调 ai.prompt() 不传模型时使用此默认模型。
 		// 老师在 设置 → AI → 配置 AI 里可添加 provider 并更换模型。

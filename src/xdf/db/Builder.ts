@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 数据库 Builder：把解析结果写入数据库
  *
  * 纯逻辑层：不依赖 Obsidian（vault 读取由调用方完成），
@@ -20,11 +20,15 @@ import {
     parseHtmlCheckboxes,
     parseTaskCheckboxes,
     parseInlineCheckboxGroups,
+    parseAttendance,
+    parseHomework,
     isLeafSection,
     normalizeTags,
     type FileKind,
     type SectionDraft,
     type CheckboxDraft,
+    type AttendanceDraft,
+    type HomeworkDraft,
 } from "./Parser";
 
 // ========== 输入类型 ==========
@@ -69,9 +73,16 @@ export class DBWriter {
     private lessonIdByFolder = new Map<string, string>();
     /** 学生姓名 → student id */
     private studentIdByName = new Map<string, string>();
+    /** 档案路径 → duowei 文件内容（学员名单） */
+    private duoweiContents = new Map<string, string>();
 
     constructor(db: SqlDb) {
         this.db = db;
+    }
+
+    /** 注册 duowei 文件内容（增量同步时由调用方传入） */
+    registerDuowei(archivePath: string, content: string): void {
+        this.duoweiContents.set(archivePath, content);
     }
 
     // ========== 增量同步接口 ==========
@@ -217,6 +228,18 @@ export class DBWriter {
             errors: [],
         };
 
+        // 0. 扫描 duowei 文件（学员名单），建立 archivePath → content 映射
+        for (const f of files) {
+            if (f.path.endsWith("学员表.duowei") && !f.binary) {
+                // duowei 路径：{档案目录}/{档案名}学员表.duowei
+                // 档案路径：{档案目录}/{档案名}.md
+                const dir = f.path.substring(0, f.path.lastIndexOf("/"));
+                const archiveName = f.basename.replace(/学员表$/, "");
+                const archivePath = `${dir}/${archiveName}.md`;
+                this.duoweiContents.set(archivePath, f.content);
+            }
+        }
+
         // 1. 清空（按 FK 反序删）
         this.db.exec(
             "DELETE FROM checkboxes; DELETE FROM sections; DELETE FROM files; " +
@@ -290,14 +313,18 @@ export class DBWriter {
         const kind = tags.includes("vip") ? "vip" : "class";
         const name = f.basename; // 档案名 = 文件名
 
-        // students：一对一挂主学生；班课从学员信息表提取
+        // students：一对一挂主学生；班课从 duowei 或 md 表格提取
         let studentId: string | null = null;
         const roster: Array<{ name: string; order: number }> = [];
 
         if (kind === "vip") {
             studentId = this.upsertStudent(name);
         } else {
-            const students = parseStudentsFromBody(body);
+            // 优先从 duowei 文件读学员名单，回退到旧的 md 表格解析
+            const duoweiContent = this.duoweiContents.get(f.path);
+            const students = duoweiContent
+                ? parseStudentsFromDuowei(duoweiContent)
+                : parseStudentsFromBody(body);
             students.forEach((s, i) => {
                 roster.push({ name: s, order: i });
             });
@@ -427,15 +454,23 @@ export class DBWriter {
         // 先删旧派生行（幂等）
         this.db.exec("DELETE FROM sections WHERE file_path = ?", [f.path]);
         this.db.exec("DELETE FROM checkboxes WHERE file_path = ?", [f.path]);
+        // Feedback 文件：同时删 attendance/homework
+        if (kind === "feedback" && lessonId) {
+            this.db.exec("DELETE FROM attendance WHERE lesson_id = ?", [lessonId]);
+            this.db.exec("DELETE FROM homework WHERE lesson_id = ?", [lessonId]);
+        }
 
         // sections
         const sections: SectionDraft[] = splitSections(body);
         let secCount = 0;
         for (const sec of sections) {
+            // 从 heading_path 首段提取学员名，查 student_id
+            const studentName = this.extractStudentNameFromPath(sec.heading_path);
+            const studentId = studentName ? this.getStudentIdByName(studentName, archiveId || undefined) : null;
             this.db.exec(
-                `INSERT INTO sections (id, file_path, archive_id, lesson_id, heading_path, level, title, body, order_index, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [uuid(), f.path, archiveId, lessonId, sec.heading_path, sec.level, sec.title, sec.body, sec.order_index, NOW()]
+                `INSERT INTO sections (id, file_path, archive_id, lesson_id, student_id, heading_path, level, title, body, order_index, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [uuid(), f.path, archiveId, lessonId, studentId, sec.heading_path, sec.level, sec.title, sec.body, sec.order_index, NOW()]
             );
             secCount++;
         }
@@ -444,9 +479,11 @@ export class DBWriter {
         let cbCount = 0;
         for (const sec of sections) {
             if (!isLeafSection(sec, sections)) continue;
+            const studentName = this.extractStudentNameFromPath(sec.heading_path);
+            const studentId = studentName ? this.getStudentIdByName(studentName, archiveId || undefined) : null;
             const items = parseHtmlCheckboxes(sec.body, sec.heading_path);
             for (const item of items) {
-                this.insertCheckbox(f.path, item, cbCount++);
+                this.insertCheckbox(f.path, item, cbCount++, studentId || undefined);
             }
         }
         const ranges = splitSectionsWithRanges(body);
@@ -454,17 +491,90 @@ export class DBWriter {
             this.insertCheckbox(f.path, item, cbCount++);
         }
         for (const item of parseInlineCheckboxGroups(body, ranges)) {
-            this.insertCheckbox(f.path, item, cbCount++);
+            // 从 section_path 提取学员名
+            const studentName = this.extractStudentNameFromPath(item.section_path);
+            const studentId = studentName ? this.getStudentIdByName(studentName, archiveId || undefined) : null;
+            this.insertCheckbox(f.path, item, cbCount++, studentId || undefined);
+        }
+
+        // Feedback 专有：出勤/作业语义化入库
+        if (kind === "feedback" && lessonId) {
+            this.writeAttendance(sections, lessonId, archiveId);
+            this.writeHomework(sections, lessonId, archiveId);
         }
 
         return { sections: secCount, checkboxes: cbCount };
     }
 
-    private insertCheckbox(path: string, item: CheckboxDraft, order: number): void {
+    /**
+     * 写入出勤数据（从 sections 中解析 `#### 出勤` heading）
+     */
+    private writeAttendance(sections: SectionDraft[], lessonId: string, archiveId: string | null): void {
+        const attendance = parseAttendance(sections);
+        for (const att of attendance) {
+            const studentId = this.getStudentIdByName(att.student_name, archiveId || undefined);
+            if (!studentId) continue;
+            const id = uuid();
+            this.db.exec(
+                `INSERT INTO attendance (id, student_id, lesson_id, status, updated_at) VALUES (?, ?, ?, ?, ?)
+                 ON CONFLICT(student_id, lesson_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at`,
+                [id, studentId, lessonId, att.status, NOW()]
+            );
+        }
+    }
+
+    /**
+     * 写入作业数据（从 sections 中解析 `#### 作业情况` heading）
+     */
+    private writeHomework(sections: SectionDraft[], lessonId: string, archiveId: string | null): void {
+        const homework = parseHomework(sections);
+        for (const hw of homework) {
+            const studentId = this.getStudentIdByName(hw.student_name, archiveId || undefined);
+            if (!studentId) continue;
+            const id = uuid();
+            this.db.exec(
+                `INSERT INTO homework (id, student_id, lesson_id, submitted, updated_at) VALUES (?, ?, ?, ?, ?)
+                 ON CONFLICT(student_id, lesson_id) DO UPDATE SET submitted=excluded.submitted, updated_at=excluded.updated_at`,
+                [id, studentId, lessonId, hw.submitted ? 1 : 0, NOW()]
+            );
+        }
+    }
+
+    private insertCheckbox(path: string, item: CheckboxDraft, order: number, studentId?: string): void {
         this.db.exec(
-            "INSERT INTO checkboxes (file_path, section_path, item_text, checked, source, order_index) VALUES (?, ?, ?, ?, ?, ?)",
-            [path, item.section_path, item.item_text, item.checked ? 1 : 0, item.source, order]
+            "INSERT INTO checkboxes (file_path, section_path, student_id, item_text, checked, source, order_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [path, item.section_path, studentId || null, item.item_text, item.checked ? 1 : 0, item.source, order]
         );
+    }
+
+    /**
+     * 从学员名查 student_id（先查内存缓存，再查 class_roster）
+     */
+    private getStudentIdByName(name: string, archiveId?: string): string | null {
+        // 先查内存缓存
+        const cached = this.studentIdByName.get(name);
+        if (cached) return cached;
+        // 再查 class_roster（按 archive_id 限定范围）
+        if (archiveId) {
+            const rows = this.db.query<{ student_id: string }>(
+                "SELECT student_id FROM class_roster WHERE archive_id = ? AND student_name = ?",
+                [archiveId, name]
+            );
+            if (rows.length) return rows[0].student_id;
+        }
+        // 最后查 students 表（全局匹配）
+        const rows = this.db.query<{ id: string }>(
+            "SELECT id FROM students WHERE name = ?", [name]
+        );
+        return rows.length ? rows[0].id : null;
+    }
+
+    /**
+     * 从 heading_path 首段提取学员名（如 "👤 张三/原始记录/出勤" → "张三"）
+     */
+    private extractStudentNameFromPath(headingPath: string): string {
+        const firstSegment = headingPath.split("/")[0] || "";
+        return firstSegment.replace(/^👤\s*/, "").trim();
     }
 
     // ========== 归属判定 ==========
@@ -493,7 +603,7 @@ export class DBWriter {
 
     // ========== students ==========
 
-    private upsertStudent(name: string): string {
+    private upsertStudent(name: string, code?: string): string {
         const existing = this.studentIdByName.get(name);
         if (existing) return existing;
         const rows = this.db.query<{ id: string }>(
@@ -501,9 +611,9 @@ export class DBWriter {
         );
         const id = rows.length ? rows[0].id : uuid();
         this.db.exec(
-            `INSERT INTO students (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at`,
-            [id, name, NOW(), NOW()]
+            `INSERT INTO students (id, name, student_code, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, student_code=excluded.student_code`,
+            [id, name, code || null, NOW(), NOW()]
         );
         this.studentIdByName.set(name, id);
         return id;
@@ -528,7 +638,8 @@ export async function collectVaultFiles(app: App): Promise<FileSnapshot[]> {
         // getFiles 含隐藏目录文件，过滤系统目录
         if (file.path.split("/").some(seg => SKIP_DIRS.has(seg))) continue;
         if (SKIP_EXTS.has(file.extension.toLowerCase())) continue;
-        if (file.extension === "md") {
+        // md 和 duowei 都是文本，读全文；其余按二进制只登记路径
+        if (file.extension === "md" || file.extension === "duowei") {
             const content = await app.vault.cachedRead(file);
             files.push({
                 path: file.path,
@@ -573,7 +684,23 @@ function arrayOf(v: unknown): unknown[] {
 }
 
 /**
+ * 从 duowei 文件内容提取学生姓名（f1 字段）
+ */
+function parseStudentsFromDuowei(content: string): string[] {
+    try {
+        const doc = JSON.parse(content);
+        const records = doc.records || [];
+        return records
+            .map((r: { values?: Record<string, string> }) => r.values?.f1)
+            .filter((name: string | undefined): name is string => !!name);
+    } catch {
+        return [];
+    }
+}
+
+/**
  * 从档案页正文「学员信息」表格提取学生姓名（班课）
+ * 回退兼容：duowei 文件不存在时使用
  */
 function parseStudentsFromBody(body: string): string[] {
     const lines = body.split("\n");

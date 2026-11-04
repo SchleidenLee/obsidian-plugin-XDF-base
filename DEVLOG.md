@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-11-04 · DB 学员名单数据源收敛（Phase 3：md 表格 → duowei）
+
+- [Builder.ts](./src/xdf/db/Builder.ts)：`DBWriter` 新增 `duoweiContents` Map 和 `registerDuowei()` 方法；`rebuildAll()` 扫描 vault 时识别 `*学员表.duowei` 文件并建立 `archivePath → content` 映射；`writeArchive()` 优先从 duowei 读学员名单（`parseStudentsFromDuowei`），回退到旧的 md 表格解析（`parseStudentsFromBody`）。新增 `parseStudentsFromDuowei()` 函数：JSON 解析 duowei 文件，提取 `records[].values.f1`（姓名字段）。
+- [Sync.ts](./src/xdf/db/Sync.ts)：增量同步时，档案页变更前先读对应的 `{档案名}学员表.duowei` 文件，调用 `writer.registerDuowei()` 传给 writer。
+- **为什么**：11-03 学员表改造后，档案首页的 `## 👥 学员信息` 从 md 表格换成 `![[{班号}学员表.duowei]]` 嵌入，`parseStudentsFromBody()` 解析 md 表格的逻辑失效（返回空数组），导致 `class_roster` 表写不进学员数据。本次改动让 DB 同步直接读 duowei 文件，`class_roster` 数据源从 md 表格收敛到 duowei，与脚本侧（`parseStudentsFromArchive` 已改读 duowei）对齐。回退兼容保留：duowei 文件不存在时仍尝试解析 md 表格（兼容未迁移的存量档案）。
+- **实测修正（同日）**：清库重建后 `class_roster` 仍为 0 行——根因在 `collectVaultFiles()`：只有 `.md` 被当文本读内容，`.duowei` 落入 else 分支标记 `binary: true` 且 content 为空串，`rebuildAll()` 的 duowei 扫描被 `!f.binary` 全数滤掉。修复：`collectVaultFiles` 把 `.duowei` 与 `.md` 同等对待（读全文、不标 binary）。重建验证：class_roster 305 行 / 37 班全覆盖，1111（张三/李四/王五）等名单与 duowei 一致；students 305、attendance 408、homework 315（280 个班课 Feedback 面板 checkbox 全部入库）。
+- 同日修复：档案模板「## 👥 学员信息」的嵌入写的是单花括号 `![[{archiveName}学员表.duowei]]`，而模板渲染契约是 `{{双花括号}}`，占位符原样落盘导致嵌入引用失效；两个档案模板改为 `{{archiveName}}`，已生成的 1111/刘柏征档案页手工替换为真实班号。
+
+---
+
+## 2026-11-03 · 学员表改造（md 表格 → duowei 多维表格，Phase 1/2 落地）
+
+- **模板**：[班课/{archiveName}.md](./src/xdf/templates/档案/班课/{archiveName}.md) 与 [一对一/{archiveName}.md](./src/xdf/templates/档案/一对一/{archiveName}.md) 的「## 👥 学员信息」改为嵌入 `![[{archiveName}学员表.duowei]]`；duowei 与档案页**同目录**（路径 = `{班号}学员表.duowei`，班号命名避免 basename 歧义）。[ArchiveUtils.ts](./src/xdf/scripts/assets/ArchiveUtils.ts) 的 `buildArchiveBody` 改读模板文件（`loadTemplate`），旧 md 表格拼装逻辑删除。
+- **锁版 schema**：ArchiveUtils 侧新增 `ROSTER_FIELDS`（12 字段：姓名 / IELTS需求(checkbox) / 目标分数 / 考试时间(date) / 考试成绩 / 受教育程度+受教育状态(原「年级」拆分) / 学校 / 英语程度 / 已上课程(multiSelect) / 结班测成绩 / 备注）、生成器 `buildRosterDuoweiDoc`（grid 视图 + colorRules「IELTS需求=true 整行绿」+ 单格居中）与 `rosterDuoweiPath`；原始 22 字段类型与 normalize 容错结论经 duowei-table 源码（main.js）实证。
+- **建档脚本**：[班课建档.ts](./src/xdf/scripts/presets/档案管理/班课建档.ts) / [一对一建档.ts](./src/xdf/scripts/presets/档案管理/一对一建档.ts) execute 末尾追加「只建不覆」写 `{班号}学员表.duowei`（`writeIfNotExists`）。
+- **读侧**：`parseStudentsFromArchive` 重写为 async 且只读 duowei（**按字段名找 id**，不依赖具体 fld 编号；md 表格解析函数删除）；唯一调用点 [班课每课记录.ts](./src/xdf/scripts/presets/档案管理/班课每课记录.ts) 同步改 await。**注意：db/Builder 的 class_roster 数据源（md 表格）已失效，Phase 3 收敛见 PENDING。**
+- **存量迁移**：一次性脚本（项目外、非 preset）已对测试 vault 执行并验证：26 个班课/一对一档案全部换嵌入 + 生成标准 duowei；3440 的手调样张 `学员表.duowei` 改名为 `3440学员表.duowei` 保留数据。**随后按用户要求二次调整**：旧 md 表格当初写得不规范，脚本解析出的历史列数据不可信 → 已把所有生成器格式的 duowei 重置为「仅保留姓名行、其余字段全空」，数据由用户手动补录；3440 手调文件（插件 normalize 格式）不动。存量 Feedback 页是旧版生成的、本就没有「学员状态面板」头部（块锚 ^att-n/^hw-n 也不存在），不在迁移范围。
+- **改名**：Feedback 头部「✅ 快速点选」区更名「🎯 学员状态面板」（`buildClassFeedback` 的 strip 约定同步）。
+- **为什么**：md 表格无法承载选项/勾选/条件着色，读写都靠脆弱的正则；duowei 承载学员全局信息，嵌入进档案页即可视可编辑，脚本侧仍按姓名取名单。嵌入渲染器缺 colorRules/cellStyles/headerStyle 属 duowei-table 插件限制，已立补丁条目（PENDING）。
+
+---
+
+## 2026-11-03 · DB 实体化改造（学员 → 一等实体）
+
+- [Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/db/Schema.ts)：SCHEMA_VERSION 1→2；students 表加 `student_code TEXT`（可选友好编号）；sections/checkboxes 表加 `student_id TEXT REFERENCES students(id)`；新建 `attendance` 表（student_id + lesson_id + status，UNIQUE 约束）和 `homework` 表（student_id + lesson_id + submitted，UNIQUE 约束）。migrate() 改为版本不匹配时清空重建（不做数据迁移，vault 是 source of truth）。
+- [Parser.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/db/Parser.ts)：新增 `AttendanceDraft`/`HomeworkDraft` 类型和 `parseAttendance()`/`parseHomework()` 函数，从 `#### 出勤`/`#### 作业情况` heading 下解析 inline checkbox，提取学员名（heading_path 首段去 emoji）和勾选状态。`parseFile()` 返回值加 `attendance`/`homework` 字段。
+- [Builder.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/db/Builder.ts)：新增 `getStudentIdByName()`（从内存缓存/class_roster/students 表三级查 student_id）和 `extractStudentNameFromPath()`（heading_path 首段提取学员名）。sections/checkboxes INSERT 加 student_id 字段。新增 `writeAttendance()`/`writeHomework()`，Feedback 文件入库时调用，按语义写入新表。
+- **为什么**：原设计查询靠拼 heading 字符串（`section_path LIKE '%张三%出勤%'`），脆弱且慢。实体化后查询变成 `WHERE student_id = ? AND lesson_id = ?`，精确且快。改名问题靠合并 student 记录解决（手动或脚本辅助），重名问题暂不处理（概率太低）。vault 结构不变（脚本生成的模板），Parser 适配固定结构。
+
+---
+
 ## 2026-10-28 · `api.db` 门面收紧为纯只读（引擎级 query_only 硬闸）
 
 - [db/Connection.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts)：连接**默认锁死** `PRAGMA query_only=ON`（`initialize()` / `clear()` 新建库后立即上锁，fail-closed）；`exec()` 内部「开锁 → 执行 → finally 上锁」，写权限只在 exec 那一瞬间存在；`query()` 零改动，运行在默认只读态。[db/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/index.ts)：`XdfDBApi` 门面删 `exec` / `rebuild` / `setSyncEnabled`，仅留 `query` / `status` / `isSyncEnabled`；[main.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/main.ts) 与 [XdfBaseExtension.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/XdfBaseExtension.ts) 的「v1.0.0 契约：query/exec/rebuild/status」注释同步为只读契约。新增 [Connection.test.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.test.ts) 5 例（exec 窗口可写 / query 裸 DELETE 被拒 / CTE-DML 被拒 / 拒绝后锁不漏 / exec 抛错后锁回得上）。

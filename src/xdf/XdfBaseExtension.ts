@@ -1,5 +1,5 @@
-/**
- * XDF-Base 扩展
+﻿/**
+ * xdf-base 扩展
  *
  * 在 QuickAdd（fork 版）onload 末尾被调用，挂载：
  * - 数据库管理
@@ -7,7 +7,7 @@
  * - Choice 预设
  * - 设置面板的数据库命令
  *
- * 注意：这个文件是 XDF-Base 唯一对 QuickAdd 主代码的侵入点。
+ * 注意：这个文件是 xdf-base 唯一对 QuickAdd 主代码的侵入点。
  * 任何修改都集中在这，方便后续升级 QuickAdd 时 cherry-pick。
  */
 
@@ -57,17 +57,79 @@ export class XdfBaseExtension {
         try {
             registerScriptPanel(this.app, this.plugin);
         } catch (err) {
-            console.error("[XDF-Base] 脚本面板注册失败:", err);
+            console.error("[xdf-base] 脚本面板注册失败:", err);
         }
 
         // 1. 释放预设脚本
         try {
             const releaser = new ScriptReleaser(this.app);
             const releaseReport = await releaser.releaseAll();
-            console.log(`[XDF-Base] 脚本释放完成：新建 ${releaseReport.created.length}，覆盖 ${releaseReport.updated.length}，清理旧版 ${releaseReport.removed.length}，失败 ${releaseReport.failed.length}`);
+            console.log(`[xdf-base] 脚本释放完成：新建 ${releaseReport.created.length}，覆盖 ${releaseReport.updated.length}，清理旧版 ${releaseReport.removed.length}，失败 ${releaseReport.failed.length}`);
         } catch (err) {
-            console.error("[XDF-Base] 脚本释放失败:", err);
-            new Notice("❌ XDF-Base 脚本释放失败：" + err);
+            console.error("[xdf-base] 脚本释放失败:", err);
+            new Notice("❌ xdf-base 脚本释放失败：" + err);
+        }
+
+        // 1.5 释放模板（build-in 覆盖 + customized 首拷贝）
+        try {
+            const { releaseTemplates } = await import("./TplEngine");
+            await releaseTemplates(this.app);
+            console.log("[xdf-base] 模板释放完成");
+        } catch (err) {
+            console.error("[xdf-base] 模板释放失败:", err);
+            new Notice("❌ xdf-base 模板释放失败：" + err);
+        }
+
+        // 1.6 预载模板到缓存（脚本同步渲染用）
+        //      build-in 和 customized 两个来源都预载：
+        //      运行时切换「模板来源」设置无需重启插件即可生效
+        try {
+            const { TEMPLATES } = await import("./templates");
+            const cache: Record<string, string> = {};
+            for (const source of ["build-in", "customized"] as const) {
+                const dir = `00.SYSTEM/xdf_base/templates/${source}`;
+                for (const tpl of TEMPLATES) {
+                    const path = `${dir}/${tpl.relPath}`;
+                    if (await this.app.vault.adapter.exists(path)) {
+                        cache[`${source}/${tpl.relPath}`] = await this.app.vault.adapter.read(path);
+                    }
+                }
+            }
+            (window as any).__xdfTplCache = cache;
+        } catch (err) {
+            console.error("[xdf-base] 模板缓存预载失败:", err);
+        }
+
+        // 1.7 监听模板文件变更，实时刷新缓存（用户手改 customized 立即生效；
+        //     外部编辑器的改动由 Obsidian 文件监听转成 vault 事件，同样覆盖）
+        try {
+            const tplDir = "00.SYSTEM/xdf_base/templates/";
+            const onTplChange = (path: string) => {
+                if (!path.startsWith(tplDir)) return;
+                for (const source of ["build-in", "customized"] as const) {
+                    const prefix = `${tplDir}${source}/`;
+                    if (!path.startsWith(prefix)) continue;
+                    const rel = path.slice(prefix.length);
+                    const cache: Record<string, string> = (window as any).__xdfTplCache || ((window as any).__xdfTplCache = {});
+                    void (async () => {
+                        if (await this.app.vault.adapter.exists(path)) {
+                            cache[`${source}/${rel}`] = await this.app.vault.adapter.read(path);
+                        } else {
+                            delete cache[`${source}/${rel}`];
+                        }
+                    })();
+                    return;
+                }
+            };
+            this.plugin.registerEvent(this.app.vault.on("modify", f => onTplChange(f.path)));
+            this.plugin.registerEvent(this.app.vault.on("create", f => onTplChange(f.path)));
+            this.plugin.registerEvent(this.app.vault.on("delete", f => onTplChange(f.path)));
+            this.plugin.registerEvent(this.app.vault.on("rename", (f, oldPath) => {
+                onTplChange(oldPath); // 清旧键
+                onTplChange(f.path);  // 写新键
+            }));
+        } catch (err) {
+            console.error("[xdf-base] 模板缓存监听挂载失败:", err);
         }
 
         // 2. 同步预设 Choice（文件夹分组，覆盖式）
@@ -78,10 +140,10 @@ export class XdfBaseExtension {
             if (choiceResult.updated) {
                 (this.plugin as any).settings.choices = choiceResult.choices;
                 await (this.plugin as any).saveData((this.plugin as any).settings);
-                console.log(`[XDF-Base] Choice 同步完成：新增文件夹 ${choiceResult.added.length}，重建 ${choiceResult.replaced.length}`);
+                console.log(`[xdf-base] Choice 同步完成：新增文件夹 ${choiceResult.added.length}，重建 ${choiceResult.replaced.length}`);
             }
         } catch (err) {
-            console.error("[XDF-Base] Choice 同步失败:", err);
+            console.error("[xdf-base] Choice 同步失败:", err);
         }
 
         // 3. 初始化数据库（建表 + 空库全量重建 / 旧库对账补漏）
@@ -91,10 +153,10 @@ export class XdfBaseExtension {
             new SchemaManager(this.db).apply();
             this.registerDBApi();
             await this.reconcileOnStartup();
-            console.log("[XDF-Base] 数据库已初始化");
+            console.log("[xdf-base] 数据库已初始化");
         } catch (err) {
-            console.error("[XDF-Base] 数据库初始化失败:", err);
-            new Notice("⚠️ XDF-Base 数据库暂不可用：" + err);
+            console.error("[xdf-base] 数据库初始化失败:", err);
+            new Notice("⚠️ xdf-base 数据库暂不可用：" + err);
             void appendDbLog(this.app, {
                 level: "error",
                 source: "DB启动",
@@ -115,7 +177,7 @@ export class XdfBaseExtension {
         try {
             registerInlineGroupRendering(this.app, this.plugin);
         } catch (err) {
-            console.error("[XDF-Base] InlineGroup 渲染挂载失败:", err);
+            console.error("[xdf-base] InlineGroup 渲染挂载失败:", err);
         }
 
         // 6. 右键菜单：active → 归档，archived → 恢复
@@ -185,7 +247,7 @@ export class XdfBaseExtension {
                 })
             );
         } catch (err) {
-            console.error("[XDF-Base] 右键归档/恢复命令注册失败:", err);
+            console.error("[xdf-base] 右键归档/恢复命令注册失败:", err);
         }
     }
 
@@ -236,7 +298,7 @@ export class XdfBaseExtension {
 
             new Notice("✅ 已" + actionLabel + "：" + folderName);
         } catch (err) {
-            console.error("[XDF-Base] " + actionLabel + "失败:", err);
+            console.error("[xdf-base] " + actionLabel + "失败:", err);
             new Notice("❌ " + actionLabel + "失败：" + err);
         }
     }
@@ -283,7 +345,7 @@ export class XdfBaseExtension {
 
             new Notice("✅ 授课布局已打开：" + folder.name);
         } catch (err) {
-            console.error("[XDF-Base] 授课布局失败:", err);
+            console.error("[xdf-base] 授课布局失败:", err);
             new Notice("❌ 授课布局失败：" + err);
         }
     }
@@ -324,7 +386,7 @@ export class XdfBaseExtension {
             // 空库 → 全量重建（含 frontmatter 解析、实体、切块、binary 登记）
             const stats = await rebuildVaultDatabase(this.app, this.db);
             await this.db.save();
-            console.log(`[XDF-Base] 空库全量重建完成：${stats.fileCount} 文件，错误 ${stats.errors.length}`);
+            console.log(`[xdf-base] 空库全量重建完成：${stats.fileCount} 文件，错误 ${stats.errors.length}`);
             for (const e of stats.errors) {
                 void appendDbLog(this.app, {
                     level: "warn", source: "DB重建",
@@ -366,7 +428,7 @@ export class XdfBaseExtension {
             this.sync.detach();
             await this.db.close();
         } catch (err) {
-            console.error("[XDF-Base] 清理失败:", err);
+            console.error("[xdf-base] 清理失败:", err);
         }
     }
 

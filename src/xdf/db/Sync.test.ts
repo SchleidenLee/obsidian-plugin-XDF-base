@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 增量同步测试：DBWriter.upsertFile / removeFile
  * 场景：modify（含打字→新 heading）、delete、rename、kind 升降级、档案页变更连带
  */

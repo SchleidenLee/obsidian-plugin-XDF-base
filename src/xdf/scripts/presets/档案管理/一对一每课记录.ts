@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 两段式脚本：一对一每课记录
  * 释放到 00.SYSTEM/xdf_base/scripts/presets/档案管理/一对一每课记录.js
  *
@@ -143,29 +143,12 @@ const MOD = {
             if (!timeSlot) timeSlot = slots[0];
         }
 
-        // 复刻 writeLessonPackage 的 ensureFolderWithConfirm：只读判断，命中才追加覆盖选项
-        const parentFolder = chosen.parent.path;
-        const lessonNumber = U.getNextLessonNumber(parentFolder);
-        const folderPath = U.joinPath(parentFolder, U.buildLessonFolderName(chosen.basename, lessonNumber));
-        let overwrite = "yes";
-        if (ctx.app.vault.getAbstractFileByPath(folderPath)) {
-            overwrite = (await ctx.ask({
-                id: "overwrite",
-                label: "课程文件夹 \"" + folderPath + "\" 已存在，是否覆盖内部文件？",
-                type: "dropdown",
-                options: ["yes", "no"],
-                displayOptions: ["覆盖内部文件", "取消"],
-                defaultValue: "yes"
-            })) || "yes";
-        }
-
         return {
             archive: chosen.path,
             courseType: courseType,
             timeMode: timeMode,
             date: lessonDate,
-            slot: timeSlot,
-            overwrite: overwrite
+            slot: timeSlot
         };
     },
 
@@ -224,17 +207,6 @@ const MOD = {
 
             const parentFolder = archiveFile.parent.path;
             const lessonNumber = U.getNextLessonNumber(parentFolder);
-            const folderPath = U.joinPath(parentFolder, U.buildLessonFolderName(archiveFile.basename, lessonNumber));
-
-            // 复刻 ensureFolderWithConfirm 分支：取消 → 原「用户取消操作」；覆盖 → 先删再重建
-            const existing = ctx.app.vault.getAbstractFileByPath(folderPath);
-            if (existing) {
-                if (params.overwrite === "no") {
-                    ctx.notice("❌ 生成失败：用户取消操作");
-                    return;
-                }
-                await ctx.app.vault.delete(existing, true);
-            }
 
             const pkg = await U.writeLessonPackage({
                 kind: "vip",
@@ -247,8 +219,17 @@ const MOD = {
                 courseType: courseType,
                 subject: subject,
                 needSendFeedback: true,
-                overwrite: true
+                overwrite: false
             });
+
+            // 作业收集夹：第 2 课起建 "Homework Check (n-1)/"（本课批改上一次作业，收其图片）
+            // ——"Homework n.md"是出题（布置档），"Homework Check n/"是交的作业（收集夹），Check 区分身份
+            const hwNumber = U.getHomeworkNumber(lessonNumber);
+            if (hwNumber) {
+                const hwBase = pkg.folderPath + "/Homework Check " + hwNumber;
+                try { await ctx.app.vault.createFolder(hwBase); } catch (e) { /* 已存在 */ }
+                try { await ctx.app.vault.createFolder(hwBase + "/" + archiveFile.basename); } catch (e) { /* 已存在 */ }
+            }
 
             await U.updateArchiveAfterLesson({
                 archiveFile: archiveFile,

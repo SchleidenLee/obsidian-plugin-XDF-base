@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Minimal type declarations for sql.js (WASM).
  *
  * sql.js does not ship official TypeScript types; the runtime API is a single

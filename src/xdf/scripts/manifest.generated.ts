@@ -9,7 +9,6 @@
 
 import type { GeneratedScript, GeneratedAsset } from "./scriptRegistry";
 
-import { PANEL_HOMEWORK_AI_SCRIPT } from "./presets/文件生成/AI出作业";
 import { PANEL_WORDLIST_AI_SCRIPT } from "./presets/文件生成/词表工具";
 import { PANEL_ARCHIVE_1ON1_CREATE_SCRIPT } from "./presets/档案管理/一对一建档";
 import { PANEL_LESSON_1ON1_RECORD_SCRIPT } from "./presets/档案管理/一对一每课记录";
@@ -18,13 +17,10 @@ import { PANEL_LESSON_CLASS_RECORD_SCRIPT } from "./presets/档案管理/班课�
 import { PANEL_MEETING_ADD_PAGE_SCRIPT } from "./presets/行政工作/例会添加页面";
 import { PANEL_MEETING_SETUP_SCRIPT } from "./presets/行政工作/周例会建档";
 import { PANEL_MEETING_RECORD_SCRIPT } from "./presets/行政工作/周例会记录";
-import { PANEL_NEW_NOTE_SCRIPT } from "./presets/通用/新建笔记";
-import { PANEL_APPEND_TO_NOTE_SCRIPT } from "./presets/通用/追加到笔记";
 import { ARCHIVE_UTILS_SCRIPT } from "./assets/ArchiveUtils";
 import { XDF_RUNTIME_SCRIPT } from "./assets/XdfRuntime";
 
 export const GENERATED_SCRIPTS: GeneratedScript[] = [
-	{ group: "文件生成", name: "AI出作业", exportName: "PANEL_HOMEWORK_AI_SCRIPT", content: PANEL_HOMEWORK_AI_SCRIPT },
 	{ group: "文件生成", name: "词表工具", exportName: "PANEL_WORDLIST_AI_SCRIPT", content: PANEL_WORDLIST_AI_SCRIPT },
 	{ group: "档案管理", name: "一对一建档", exportName: "PANEL_ARCHIVE_1ON1_CREATE_SCRIPT", content: PANEL_ARCHIVE_1ON1_CREATE_SCRIPT },
 	{ group: "档案管理", name: "一对一每课记录", exportName: "PANEL_LESSON_1ON1_RECORD_SCRIPT", content: PANEL_LESSON_1ON1_RECORD_SCRIPT },
@@ -33,8 +29,6 @@ export const GENERATED_SCRIPTS: GeneratedScript[] = [
 	{ group: "行政工作", name: "例会添加页面", exportName: "PANEL_MEETING_ADD_PAGE_SCRIPT", content: PANEL_MEETING_ADD_PAGE_SCRIPT },
 	{ group: "行政工作", name: "周例会建档", exportName: "PANEL_MEETING_SETUP_SCRIPT", content: PANEL_MEETING_SETUP_SCRIPT },
 	{ group: "行政工作", name: "周例会记录", exportName: "PANEL_MEETING_RECORD_SCRIPT", content: PANEL_MEETING_RECORD_SCRIPT },
-	{ group: "通用", name: "新建笔记", exportName: "PANEL_NEW_NOTE_SCRIPT", content: PANEL_NEW_NOTE_SCRIPT },
-	{ group: "通用", name: "追加到笔记", exportName: "PANEL_APPEND_TO_NOTE_SCRIPT", content: PANEL_APPEND_TO_NOTE_SCRIPT },
 ];
 
 export const GENERATED_ASSETS: GeneratedAsset[] = [

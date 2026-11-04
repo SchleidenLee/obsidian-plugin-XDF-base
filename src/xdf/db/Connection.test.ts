@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Connection 只读硬闸测试（query_only 引擎级）
  * 场景：exec 临时开锁可写；query 默认锁死，夹带写的语句被引擎拒绝
  * 运行环境：WSL（vitest.xdf.config.mts）

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 脚本面板注册
  *
  * 唯一对外入口：registerScriptPanel(app, plugin)。

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 两段式脚本模块载入器
  *
  * 与 QuickAdd 的 getUserScript 保持一致：源码用 new Function 求值。

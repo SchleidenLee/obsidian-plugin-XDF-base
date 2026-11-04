@@ -1,4 +1,4 @@
-/**
+﻿/**
  * XDF 脚本运行面板（ItemView）
  *
  * 常驻右侧栏：折叠分组菜单选脚本 → 自动解析两段式脚本的 collect 生成表单 → 填参 → 运行。
@@ -464,7 +464,7 @@ export class XdfScriptPanelView extends ItemView {
 			this.log("✅ 运行完成");
 		} catch (err) {
 			const message = (err as Error)?.message || String(err);
-			console.error("[XDF-Base] 面板脚本运行失败:", err);
+			console.error("[xdf-base] 面板脚本运行失败:", err);
 			this.log(`❌ 运行失败：${message}`);
 			new Notice("❌ 脚本运行失败：" + message);
 		} finally {

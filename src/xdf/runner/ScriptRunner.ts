@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 两段式脚本驱动器
  *
  * 职责：为脚本构造 ScriptContext，并按形态驱动 collect / execute。

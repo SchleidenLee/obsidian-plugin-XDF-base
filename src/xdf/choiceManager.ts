@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Choice 预设管理（目录驱动分组）
  *
  * 预设 Choice 以「文件夹（Multi Choice）」形式写入 data.json，

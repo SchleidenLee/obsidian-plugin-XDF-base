@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 数据库 Schema 管理
  *
  * DDL 唯一权威来源：项目根目录「数据库模板.sql」（git 仓库外，防回溯丢失）。
@@ -18,17 +18,18 @@ export interface SqlDb {
 }
 
 /** 当前 schema 版本，与数据库模板.sql 末尾的 PRAGMA user_version 一致 */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** 数据库模板.sql 的内嵌副本（两处同步修改） */
 export const SCHEMA_DDL = [
     // ---------- 实体层 ----------
 
     `CREATE TABLE IF NOT EXISTS students (
-    id         TEXT PRIMARY KEY,
-    name       TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL UNIQUE,
+    student_code TEXT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
 )`,
 
     `CREATE TABLE IF NOT EXISTS archives (
@@ -79,6 +80,7 @@ export const SCHEMA_DDL = [
     file_path    TEXT NOT NULL,
     archive_id   TEXT REFERENCES archives(id) ON DELETE CASCADE,
     lesson_id    TEXT REFERENCES lessons(id) ON DELETE CASCADE,
+    student_id   TEXT REFERENCES students(id),
     heading_path TEXT NOT NULL,
     level        INTEGER NOT NULL,
     title        TEXT NOT NULL,
@@ -106,12 +108,38 @@ export const SCHEMA_DDL = [
     `CREATE TABLE IF NOT EXISTS checkboxes (
     file_path    TEXT NOT NULL,
     section_path TEXT NOT NULL,
+    student_id   TEXT REFERENCES students(id),
     item_text    TEXT NOT NULL,
     checked      INTEGER NOT NULL CHECK (checked IN (0, 1)),
     source       TEXT NOT NULL,
     order_index  INTEGER NOT NULL
 )`,
     `CREATE INDEX IF NOT EXISTS idx_checkboxes_file ON checkboxes(file_path)`,
+    `CREATE INDEX IF NOT EXISTS idx_checkboxes_student ON checkboxes(student_id)`,
+
+    // ---------- 语义层（实体化查询） ----------
+
+    `CREATE TABLE IF NOT EXISTS attendance (
+    id         TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL REFERENCES students(id),
+    lesson_id  TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    status     TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (student_id, lesson_id)
+)`,
+    `CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_attendance_lesson ON attendance(lesson_id)`,
+
+    `CREATE TABLE IF NOT EXISTS homework (
+    id         TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL REFERENCES students(id),
+    lesson_id  TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    submitted  INTEGER NOT NULL CHECK (submitted IN (0, 1)),
+    updated_at TEXT NOT NULL,
+    UNIQUE (student_id, lesson_id)
+)`,
+    `CREATE INDEX IF NOT EXISTS idx_homework_student ON homework(student_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_homework_lesson ON homework(lesson_id)`,
 ].join(";\n") + ";";
 
 export class SchemaManager {
@@ -160,14 +188,26 @@ export class SchemaManager {
     }
 
     /**
-     * 增量迁移（预留：版本 1 之后加列/加表时在此追加步骤）
+     * 增量迁移：版本不匹配时清空重建（不做数据迁移）。
+     * 设计决策：vault 是 source of truth，DB 是镜像，删了重建即可。
      */
     private migrate(from: number): void {
-        // 示例：
-        // if (from < 2) {
-        //     this.db.exec("ALTER TABLE archives ADD COLUMN xxx TEXT");
-        // }
-        void from;
-        this.enableForeignKeys();
+        // 版本不匹配 → 清空所有表重建（不做数据迁移）
+        this.db.exec("PRAGMA foreign_keys = OFF");
+        this.db.exec(`
+            DROP TABLE IF EXISTS attendance;
+            DROP TABLE IF EXISTS homework;
+            DROP TABLE IF EXISTS checkboxes;
+            DROP TABLE IF EXISTS sections;
+            DROP TABLE IF EXISTS files;
+            DROP TABLE IF EXISTS class_roster;
+            DROP TABLE IF EXISTS lessons;
+            DROP TABLE IF EXISTS archives;
+            DROP TABLE IF EXISTS students;
+        `);
+        this.db.exec("PRAGMA foreign_keys = ON");
+        // 重建所有表
+        this.db.exec(SCHEMA_DDL);
+        this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     }
 }

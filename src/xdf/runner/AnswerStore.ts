@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 面板答案持久化
  *
  * 存放于 00.SYSTEM/xdf_base/panel/answers.json，
@@ -31,7 +31,7 @@ export class AnswerStore {
 				}
 			}
 		} catch (err) {
-			console.error("[XDF-Base] 面板答案读取失败:", err);
+			console.error("[xdf-base] 面板答案读取失败:", err);
 			this.data = {};
 		}
 	}
@@ -55,7 +55,7 @@ export class AnswerStore {
 				JSON.stringify(this.data, null, 2),
 			);
 		} catch (err) {
-			console.error("[XDF-Base] 面板答案写入失败:", err);
+			console.error("[xdf-base] 面板答案写入失败:", err);
 		}
 	}
 }

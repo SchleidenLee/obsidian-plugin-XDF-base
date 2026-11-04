@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 文件解析器（纯函数，不依赖 Obsidian）
  *
  * 三件事：
@@ -51,12 +51,28 @@ export interface CheckboxDraft {
     order_index: number;
 }
 
+/** 出勤数据（从 `#### 出勤` heading 下解析） */
+export interface AttendanceDraft {
+    student_name: string;   // 从 heading_path 首段提取（如 "👤 张三" → "张三"）
+    status: string;         // 正常/迟到/早退/线上课/请假
+}
+
+/** 作业数据（从 `#### 作业情况` heading 下解析） */
+export interface HomeworkDraft {
+    student_name: string;   // 从 heading_path 首段提取
+    submitted: boolean;     // 已完成=true/未完成=false
+}
+
 export interface ParsedFile {
     kind: FileKind;
     sections: SectionDraft[];
     checkboxes: CheckboxDraft[];
     /** nav 专有：「- [x] 提交反馈」勾选状态 */
     feedbackSent: boolean | null;
+    /** 出勤数据（Feedback 文件专有） */
+    attendance: AttendanceDraft[];
+    /** 作业数据（Feedback 文件专有） */
+    homework: HomeworkDraft[];
 }
 
 // ========== 常量 ==========
@@ -402,6 +418,74 @@ export function parseInlineCheckboxGroups(
 }
 
 /**
+ * 从 heading_path 首段提取学员名（如 "👤 张三/原始记录/出勤" → "张三"）
+ */
+function extractStudentName(headingPath: string): string {
+    const firstSegment = headingPath.split("/")[0] || "";
+    // 去掉 emoji 前缀（如 "👤 "）
+    return firstSegment.replace(/^👤\s*/, "").trim();
+}
+
+/**
+ * 从 section body 中解析出勤数据（`#### 出勤` heading 下的 inline checkbox）
+ * 返回 [{ student_name, status }]，status 为被勾选的选项文字
+ */
+export function parseAttendance(sections: SectionDraft[]): AttendanceDraft[] {
+    const results: AttendanceDraft[] = [];
+    for (const sec of sections) {
+        // 找 heading_path 以 "/出勤" 结尾的 section
+        if (!sec.heading_path.endsWith("/出勤")) continue;
+        const studentName = extractStudentName(sec.heading_path);
+        if (!studentName) continue;
+
+        // 从 body 中解析 inline checkbox 组
+        const lines = normalizeEol(sec.body).split("\n");
+        for (const line of lines) {
+            const gm = line.match(INLINE_GROUP_RE);
+            if (!gm) continue;
+            const parts = gm[2].split("|").map(s => s.trim().match(INLINE_ITEM_RE));
+            if (parts.length < 2 || parts.some(p => !p || !p[2].trim())) continue;
+            // 找被勾选的项
+            const checked = parts.find(p => p && p[1].toLowerCase() === "x");
+            if (checked) {
+                results.push({ student_name: studentName, status: checked[2].trim() });
+            }
+        }
+    }
+    return results;
+}
+
+/**
+ * 从 section body 中解析作业数据（`#### 作业情况` heading 下的 inline checkbox）
+ * 返回 [{ student_name, submitted }]，submitted 为"已完成"=true/"未完成"=false
+ */
+export function parseHomework(sections: SectionDraft[]): HomeworkDraft[] {
+    const results: HomeworkDraft[] = [];
+    for (const sec of sections) {
+        // 找 heading_path 以 "/作业情况" 结尾的 section
+        if (!sec.heading_path.endsWith("/作业情况")) continue;
+        const studentName = extractStudentName(sec.heading_path);
+        if (!studentName) continue;
+
+        // 从 body 中解析 inline checkbox 组
+        const lines = normalizeEol(sec.body).split("\n");
+        for (const line of lines) {
+            const gm = line.match(INLINE_GROUP_RE);
+            if (!gm) continue;
+            const parts = gm[2].split("|").map(s => s.trim().match(INLINE_ITEM_RE));
+            if (parts.length < 2 || parts.some(p => !p || !p[2].trim())) continue;
+            // 找被勾选的项
+            const checked = parts.find(p => p && p[1].toLowerCase() === "x");
+            if (checked) {
+                const submitted = checked[2].trim() === "已完成";
+                results.push({ student_name: studentName, submitted });
+            }
+        }
+    }
+    return results;
+}
+
+/**
  * 行号 → 最深 section 的 heading_path：
  * 父块区间包含子孙块（parseHeadings 的区间语义），命中多个时取 level 最深者
  */
@@ -468,7 +552,7 @@ export function parseFile(
 ): ParsedFile {
     const kind = detectKind(basename, tags);
     if (kind === "other") {
-        return { kind, sections: [], checkboxes: [], feedbackSent: null };
+        return { kind, sections: [], checkboxes: [], feedbackSent: null, attendance: [], homework: [] };
     }
 
     const sections = splitSections(content);
@@ -494,5 +578,9 @@ export function parseFile(
         feedbackSent = t ? t.checked : false;
     }
 
-    return { kind, sections, checkboxes, feedbackSent };
+    // Feedback 专有：出勤/作业语义化解析
+    const attendance = kind === "feedback" ? parseAttendance(sections) : [];
+    const homework = kind === "feedback" ? parseHomework(sections) : [];
+
+    return { kind, sections, checkboxes, feedbackSent, attendance, homework };
 }

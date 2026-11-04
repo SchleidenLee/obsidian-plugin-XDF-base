@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Builder 集成测试：sql.js 内存库 + Reference/current class 真实数据
  * 运行环境：WSL（singleThread，见 vitest.xdf.config.mts）
  */
