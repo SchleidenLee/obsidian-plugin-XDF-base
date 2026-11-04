@@ -150,6 +150,15 @@ const MOD = {
         const folderPath = seasonFolder + "/" + folderName;
         const homePath = folderPath + "/" + folderName + ".md";
 
+        // 先渲染全部模板（只读、无副作用）；任何占位符错误都在建目录前暴露
+        const tplVars = { fy: fy, seasonFolderName: seasonFolderName, date: dateStr, n: meetingNumber };
+        const homeBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/首页.md", tplVars);
+        const recordBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/会议记录.md", tplVars);
+        const researchBody = U.loadTemplate(
+            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/教研笔记.md", tplVars);
+
         try {
             if (!ctx.app.vault.getAbstractFileByPath(folderPath)) {
                 await ctx.app.vault.createFolder(folderPath);
@@ -165,9 +174,6 @@ const MOD = {
         }
 
         // 首页（frontmatter 留代码；正文走模板）
-        const tplVars = { fy: fy, seasonFolderName: seasonFolderName, date: dateStr, n: meetingNumber };
-        const homeBody = U.loadTemplate(
-            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/首页.md", tplVars);
         const homeContent = [
             "---",
             "date: " + dtISO,
@@ -184,8 +190,6 @@ const MOD = {
         await ctx.app.vault.create(homePath, homeContent);
 
         // 会议记录（frontmatter 留代码；正文走模板）
-        const recordBody = U.loadTemplate(
-            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/会议记录.md", tplVars);
         const recordContent = [
             "---",
             "date: " + dtISO,
@@ -200,8 +204,6 @@ const MOD = {
         await ctx.app.vault.create(folderPath + "/会议记录.md", recordContent);
 
         // 教研笔记（frontmatter 留代码；正文走模板）
-        const researchBody = U.loadTemplate(
-            "行政工作/周例会/{fy}/{seasonFolderName}/{date} 第{n}次例会/教研笔记.md", tplVars);
         const researchContent = [
             "---",
             "date: " + dtISO,

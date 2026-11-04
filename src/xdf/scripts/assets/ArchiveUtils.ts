@@ -1020,16 +1020,7 @@ async function writeLessonPackage(opts) {
         }
     }
 
-    if (opts.overwrite) {
-        await ensureFolderWithConfirm(
-            folderPath,
-            "课程文件夹 \"" + folderPath + "\" 已存在，是否覆盖内部文件？"
-        );
-    } else {
-        const created = await ensureFolder(folderPath);
-        if (created) new Notice("📁 创建课程文件夹 " + folderName);
-    }
-
+    // 先渲染模板（只读、无副作用）；任何占位符错误都在建目录前暴露
     const nav = buildNav(opts);
     let feedback;
     if (opts.kind === "class") {
@@ -1042,6 +1033,16 @@ async function writeLessonPackage(opts) {
             day: opts.day,
             subject: opts.subject
         });
+    }
+
+    if (opts.overwrite) {
+        await ensureFolderWithConfirm(
+            folderPath,
+            "课程文件夹 \"" + folderPath + "\" 已存在，是否覆盖内部文件？"
+        );
+    } else {
+        const created = await ensureFolder(folderPath);
+        if (created) new Notice("📁 创建课程文件夹 " + folderName);
     }
 
     const files = [

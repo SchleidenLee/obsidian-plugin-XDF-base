@@ -221,14 +221,7 @@ const MOD = {
             const studentFolderPath = U.joinPath(basePath, studentName);
             const archiveFilePath = U.joinPath(studentFolderPath, studentName + ".md");
 
-            // 复刻 ensureFolderWithConfirm：不存在则建夹；已存在按 collect 的答案继续或取消
-            const existing = ctx.app.vault.getAbstractFileByPath(studentFolderPath);
-            if (!existing) {
-                await ctx.app.vault.createFolder(studentFolderPath);
-            } else if (params.folderConfirm !== "yes") {
-                throw new Error("用户取消操作");
-            }
-
+            // 先渲染模板（只读、无副作用）；任何占位符错误都在建目录前暴露
             const frontmatter = U.buildFrontmatter(U.buildArchiveFrontmatterFields({
                 kind: "vip",
                 startingDate: startingDate,
@@ -241,6 +234,15 @@ const MOD = {
                 archiveName: studentName,
                 courseType: courseType
             });
+
+            // 复刻 ensureFolderWithConfirm：不存在则建夹；已存在按 collect 的答案继续或取消
+            const existing = ctx.app.vault.getAbstractFileByPath(studentFolderPath);
+            if (!existing) {
+                await ctx.app.vault.createFolder(studentFolderPath);
+            } else if (params.folderConfirm !== "yes") {
+                throw new Error("用户取消操作");
+            }
+
             const action = await U.writeOrUpdateFile(archiveFilePath, frontmatter + body);
             ctx.notice("✅ 档案已" + (action === "created" ? "创建" : "更新") + "：" + archiveFilePath);
 

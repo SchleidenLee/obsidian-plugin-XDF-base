@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-10-31 · 模板释放层收口（删除重复渲染实现 + 写盘前预渲染）
+
+- **TplEngine 瘦身为纯释放器**：删除无引用的 `renderTemplate` / `renderPath` / `readTemplateFile` / `getTemplate` 与 `RenderContext` 类型。正文渲染的唯一实现留在 `ArchiveUtils.loadTemplate`，避免以后改占位符规则时改到没人调用的那份。
+- **改用「先渲染、后动盘」**：`周例会建档`、`周例会记录`、`一对一建档`、`班课建档` 以及 `ArchiveUtils.writeLessonPackage`（覆盖一对一/班课每课记录）把模板渲染提前到 `createFolder` / `ensureFolder` 之前。原先占位符写错时目录已经建好，会留下空壳残留；现在渲染失败时一个文件都不创建。
+- **为什么**：模板正文由用户随时手改，占位符拼错是高频风险；运行时虽已 fail-closed 抛「未知占位符」，但报错发生在写盘之后，会留脏数据。
+- **待定**：周例会目录命名与路径占位符方案记入 `PENDING.md` E 项。
+- **验证**：WSL `pnpm build` 通过（`tsc -noEmit` 无错误，8 脚本 + 2 资产正常生成）。
+
+---
+
 ## 2026-11-04 · duowei 学员表全量入库（Schema v3：student_profile + 结班测成绩 + .duowei 增量同步）
 
 - **Schema（[Schema.ts](./src/xdf/db/Schema.ts)）**：`SCHEMA_VERSION` 2→3。新增 `student_profile` 表（主键 `student_id`，FK → `students(id) ON DELETE CASCADE`），9 列：`ielts_needed / target_score / exam_date / exam_score / education_level / education_status / school / english_level / notes`；`class_roster` 新增 `final_exam_score REAL`。迁移沿用「版本不匹配 → 清空重建」（vault 是 source of truth）。

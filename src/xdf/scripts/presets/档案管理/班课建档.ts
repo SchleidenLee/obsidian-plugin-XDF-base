@@ -212,12 +212,7 @@ const MOD = {
             const basePath = resolveTargetFolder(ctx, params.targetFolder, params.targetFolderCustom);
             if (basePath === null) throw new Error("未选择存放位置");
 
-            const classFolderPath = U.joinPath(basePath, className);
-            const created = await U.ensureFolder(classFolderPath);
-            ctx.notice(created
-                ? "📁 班级文件夹 \"" + className + "\" 已创建"
-                : "📁 班级文件夹 \"" + className + "\" 已存在");
-
+            // 先渲染模板（只读、无副作用）；任何占位符错误都在建目录前暴露
             const frontmatter = U.buildFrontmatter(U.buildArchiveFrontmatterFields({
                 kind: "class",
                 startingDate: startingDate,
@@ -231,6 +226,12 @@ const MOD = {
                 archiveName: className,
                 courseType: courseType
             });
+
+            const classFolderPath = U.joinPath(basePath, className);
+            const created = await U.ensureFolder(classFolderPath);
+            ctx.notice(created
+                ? "📁 班级文件夹 \"" + className + "\" 已创建"
+                : "📁 班级文件夹 \"" + className + "\" 已存在");
             const archiveFilePath = U.joinPath(classFolderPath, className + ".md");
             const action = await U.writeIfNotExists(archiveFilePath, frontmatter + body);
             if (action === "created") ctx.notice("📄 班级主页已创建");
