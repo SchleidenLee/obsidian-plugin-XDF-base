@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-11-05 · 移除 CI / CodeQL / 依赖审查 / PR 标题工作流，只保留 Release
+
+- 删除 `.github/workflows/` 下 `ci.yml`、`codeql.yml`、`dependency-review.yml`、`pr-title.yml`，只留 `release.yml`。
+- **为什么**：单人开发直接推 main、不走 PR —— `dependency-review` 与 `pr-title` 只在 PR 触发，永不运行；`codeql` 对本地桌面插件收益极低；`ci.yml` 连续 6 次失败无人处理，已成噪音。本地 `pnpm build` 已覆盖 tsc，`release.yml` 自身含 Build 步骤，发布链路不缺兜底。
+
+---
+
 ## 2026-10-31 · 模板释放层收口（删除重复渲染实现 + 写盘前预渲染）
 
 - **TplEngine 瘦身为纯释放器**：删除无引用的 `renderTemplate` / `renderPath` / `readTemplateFile` / `getTemplate` 与 `RenderContext` 类型。正文渲染的唯一实现留在 `ArchiveUtils.loadTemplate`，避免以后改占位符规则时改到没人调用的那份。
