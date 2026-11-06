@@ -11,7 +11,7 @@
 
 ## 🟢 进行中
 
-（暂无）
+（无。DOC-SYNC 已于 2026-11-06 完成并移入 DEVLOG；下方保留真实未来计划。）
 
 > 学员表 DB 镜像（Phase 1~3）已于 2026-11-04 完成：`.duowei` → `student_profile`（非空增量 upsert）+ `class_roster.final_exam_score`，`.duowei` 变更自动触发同步。表结构见 [ARCHITECTURE.md](./ARCHITECTURE.md) / [Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Schema.ts)，变更史见 [DEVLOG.md](./DEVLOG.md)。
 
@@ -45,7 +45,7 @@
 
 ### A. 代码审查整改（中）
 
-- [ ] **对 `TFile[]` 调用 `sort()` 未传比较器** — [周例会记录.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/presets/行政工作/周例会记录.ts)、[例会添加页面.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/presets/行政工作/例会添加页面.ts)
+- [ ] **对 `TFile[]` 调用 `sort()` 未传比较器** — `src/xdf/scripts/presets/行政工作/周例会记录.ts`、`src/xdf/scripts/presets/行政工作/例会添加页面.ts`（旧审查链接指向已不存在的 `Test/base-refined`，2026-11-06 改为现行相对路径；行号仍以动手时源码为准）
   - 现象：两处对 `.getMarkdownFiles()` 过滤后的数组直接 `.sort().reverse()`，`sort()` 走默认字符串（UTF-16 码元）排序。
   - 影响：中文与序号在字典序下未必符合预期（尤其多位数字序号），影响默认选中项与展示顺序。
   - 修复方向：显式传比较器（按路径 `localeCompare` 或按解析出的序号数值），并明确升降序意图。
@@ -84,7 +84,7 @@
 
 背景：目标模型（v4.1 flash）支持结构化输出，把词表脚本现有的「手写解析 LLM 输出」改为「模型结构化输出 + 显式校验」。
 
-- **现状** — [词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/xdf/scripts/presets/文件生成/词表工具.ts)
+- **现状** — `src/xdf/scripts/presets/文件生成/词表工具.ts`（旧审查链接指向已不存在的 `Test/base-refined`）
   - 脚本用自然语言要求模型「只输出 JSON 数组，不要 markdown 代码块标记」，再调 `quickAddApi.ai.prompt(prompt, undefined, { systemPrompt, modelOptions: { temperature: 0.2 } })`。
   - 经核实，`ai.prompt` 的 `settings.modelOptions` 类型为 `Partial<OpenAIModelParameters>`（[quickAddApi.ts:510](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/quickAddApi.ts#L510)；类型定义 [OpenAIModelParameters.ts:6-23](file:///x:/AI/projects/XDF-obsidian-system/Test/base-refined/src/ai/OpenAIModelParameters.ts#L6-L23) 仅有 `temperature` / `top_p` / `frequency_penalty` / `presence_penalty`），**无法透传 `response_format`**。整条链路（`quickAddApi` → `Prompt()` → `OpenAIRequest`）都没有 `responseFormat` 入口，故脚本只能靠提示词约束格式、被迫手写清洗。
 
@@ -112,6 +112,12 @@
 ---
 
 ## ⚪ 待定
+
+### F. 只读门面是否仍可被绕过（后续再查，本条不是已修复）
+
+- 公开门面当前只有 `query` / `status` / `isSyncEnabled`，连接默认 `PRAGMA query_only=ON`。
+- **已证实绕过路径（2026-11-06，QA 用 Base 自带 sql.js 做内存级复现）**：`PRAGMA query_only=OFF` 可经门面 `query()` 的 prepare/step 路径执行，随后 INSERT 成功。文本白名单挡不住夹带写的语句，引擎闸也未覆盖该调用路径。
+- 修复方向：在 `Connection.query()` 层拒绝 `PRAGMA ... =` 赋值形式，或改用 authorizer / 更严格的语句闸；查清影响面后再决定改法。本条不是已修复。
 
 ### E. 周例会模板与路径占位符方案（待定）
 

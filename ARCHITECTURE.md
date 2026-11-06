@@ -39,7 +39,7 @@ src/
     │   └── PanelFormRenderer.ts  按 FieldRequirement 渲染控件并回填值
     ├── db/                    SQLite 同步层
     │   ├── Connection.ts       sql.js 连接（initialize / exec / query / save / clear / getStatus）
-    │   ├── Schema.ts           7 表 DDL（「数据库模板.sql」内嵌副本）+ 版本 / 外键
+    │   ├── Schema.ts           Schema v3，10 表 DDL（「数据库模板.sql」内嵌副本）+ 版本 / 外键
     │   ├── Builder.ts          文件快照 → 实体 / 内容入库（rebuildDatabase、DBWriter）
     │   ├── Parser.ts           frontmatter / 章节 / 内联 checkbox 解析
     │   ├── Sync.ts             vault 事件监听 + 500ms debounce + 2s 节流增量同步
@@ -53,7 +53,7 @@ src/
     │   ├── scriptRegistry.ts    从 manifest.generated 装配 SCRIPTS + ASSETS + GROUP_ORDER
     │   ├── ScriptReleaser.ts    释放到 00.SYSTEM/xdf_base/scripts/（源码目录即释放路径）
     │   ├── manifest.generated.ts auto-manifest.mjs 构建期生成并提交入库（勿手改）
-    │   ├── presets/<分组>/       业务脚本：档案管理×4 / 文件生成×2 / 行政工作×3 / 通用×2
+    │   ├── presets/<分组>/       业务脚本：档案管理×4 / 文件生成×1 / 行政工作×3（无「通用」分组，「AI 出作业」已删除）
     │   └── assets/              共享资产（扁平）：ArchiveUtils.ts / XdfRuntime.ts
     └── types/
         └── sql.js.d.ts
@@ -74,13 +74,13 @@ src/
 | [InlineGroup.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/InlineGroup.ts) | 把单行 `出勤：[ ] 正常 \| [ ] 迟到 …` 渲染为内联 checkbox 组 | Live Preview 用 CM6 ViewPlugin + WidgetType；阅读模式用 MarkdownPostProcessor；点击回写文本，随插件生命周期自动清理 |
 | [db/index.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/index.ts) | `createDBApi` 暴露**只读门面** `query / status / isSyncEnabled`（2026-10-28 起无 `exec / rebuild / setSyncEnabled`——DB 是 vault 镜像，外部不写） | 挂载点：`plugin.api.db`（`main.ts get api()` 懒 getter，2026-10-17 接上）；另有 `plugin._xdfBase.getDBApi()` 与全局单例 `getXdfBaseInstance()` |
 | [db/Connection.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts) | sql.js（WASM）连接管理，库文件 `.xdf/xdf.db`；**引擎级只读硬闸**：连接默认 `PRAGMA query_only=ON`，写只在 `exec()` 内「开锁→执行→finally 上锁」，`query()` 递入的 CTE-DML 被引擎拒绝（见 Connection.test.ts） | WASM 经 esbuild binary loader 内联进 main.js；`save()` 直接 writeBinary 非原子；`clear()` 失败态不一致（技术债） |
-| [db/Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Schema.ts) | 8 表 DDL + `PRAGMA user_version` 版本 + 外键开启 | 实体层 `students/student_profile/archives/lessons/class_roster`，内容层 `sections/files/checkboxes`；`student_profile` 存学员全局属性（非空增量 upsert），`class_roster.final_exam_score` 存结班测成绩（课程绑定）；DDL 以仓库外「数据库模板.sql」为权威，此处为同步副本 |
+| [db/Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Schema.ts) | Schema v3，10 表 DDL + `PRAGMA user_version` 版本 + 外键开启 | 实体层 `students/archives/lessons/class_roster/student_profile`，内容层 `sections/files/checkboxes`，语义层 `attendance/homework`；`student_profile` 存学员全局属性（非空增量 upsert），`class_roster.final_exam_score` 存结班测成绩（课程绑定）；DDL 以仓库外「数据库模板.sql」为权威，此处为同步副本 |
 | [db/Builder.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Builder.ts) | 文件快照解析入库：`rebuildDatabase`（全量）、`DBWriter`（增量 upsert/remove） | 写入顺序按归属链依赖：档案 → nav → 其余；档案页优先读 duowei 学员表（回退 md 表格），写 `student_profile` + `class_roster.final_exam_score` |
 | [db/Parser.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Parser.ts) | frontmatter 块解析、`detectKind`、章节切块、内联 checkbox 组解析、`parseDuoweiRoster`（duowei 学员表 JSON → 结构化行） | 与 InlineGroup 共用同一「单行 checkbox 组」契约；duowei 字段映射优先列名、回退 `f1`~`f12` |
 | [db/Sync.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Sync.ts) | vault create/modify/delete/rename 事件 → 500ms debounce + 2s 节流 → 分桶增量写库 | 最终一致 ≈2.5s；`shouldTrack` 已加 `instanceof TFile` 守卫；handleEvent 不区分 create/modify（技术债）；`.duowei` 变更会连带重写所属档案页 |
 | [TplEngine.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/TplEngine.ts) | `releaseTemplates()`：把 `TEMPLATES` 释放到 `00.SYSTEM/xdf_base/templates/`——build-in 无条件覆盖，customized 逐文件补缺（已存在不动） | 只负责释放，不渲染；正文渲染唯一实现在 `ArchiveUtils.loadTemplate` |
 | [scripts/ScriptReleaser.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/ScriptReleaser.ts) | 把 `SCRIPTS` + `ASSETS` 释放到 `00.SYSTEM/xdf_base/scripts/`（源码目录即释放路径） | 逐级建目录；无条件覆盖；旧释放文件不自动迁移，由用户手动清理；用户自建脚本不动 |
-| [scripts/manifest.generated.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/manifest.generated.ts) | 构建期由 [auto-manifest.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/scripts/auto-manifest.mjs) 扫 `presets/` / `assets/` 生成的脚本清单（`GENERATED_SCRIPTS` 11 项 + `GENERATED_ASSETS` 2 项），提交入库 | 勿手改；fail-fast：presets 根级散装文件、空分组、assets 子目录、缺失 / 重复 `*_SCRIPT` 导出即构建报错 |
+| [scripts/manifest.generated.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/manifest.generated.ts) | 构建期由 [auto-manifest.mjs](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/scripts/auto-manifest.mjs) 扫 `presets/` / `assets/` 生成的脚本清单（当前 `GENERATED_SCRIPTS` 8 项 + `GENERATED_ASSETS` 2 项），提交入库 | 勿手改；fail-fast：presets 根级散装文件、空分组、assets 子目录、缺失 / 重复 `*_SCRIPT` 导出即构建报错 |
 | [scripts/scriptRegistry.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/scriptRegistry.ts) | 从自动清单装配 `SCRIPTS`（path = `scripts/presets/<分组>/<名>.js`）+ `ASSETS`（path = `scripts/assets/<名>.js`）+ `GROUP_ORDER` + `groupScripts()` | id / QuickAdd 菜单名 / 释放文件名 = 中文文件名；分组 = presets 分组目录；加脚本只需落文件，构建自动入清单 |
 | [scripts/assets/XdfRuntime.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/assets/XdfRuntime.ts) | 共享运行时源码（释放为 `scripts/assets/XdfRuntime.js`）：`run(mod)` 造 native ctx（`ask` 经 `api.suggester / inputPrompt / wideInputPrompt / datePrompt`）顺序跑 `collect → execute` | QuickAdd 侧双入口唯一支点；面板侧不加载它 |
 | [scripts/assets/ArchiveUtils.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/assets/ArchiveUtils.ts) | 建档 / 课次包核心工具库（释放为 `scripts/assets/ArchiveUtils.js`）：nav 生成、相对路径链接（`./`、`../`）、7 文件课次包、反馈块、**学员表（duowei）**：12 字段锁版 schema `ROSTER_FIELDS` + 生成器 `buildRosterDuoweiDoc` + 解析 `parseStudentsFromArchive`（async，读 `{班号}学员表.duowei`，按字段**名**取 id）| 被其他脚本经 `loadUtils(ctx)` 加载，不作为可运行 Choice |
@@ -266,8 +266,8 @@ module.exports = MOD;
 
 取自 [PENDING.md](./PENDING.md)「代码审查整改计划（2026-10-04）」，此处只列架构层面的记录点：
 
-- **AI 产物无条件覆盖当前笔记**（[词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)、[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)），无备份 / 预览 / 确认。
-- **homework-ai 半成品逻辑仍随「AI 出作业」发布**（[AI出作业.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/AI出作业.ts)），每次启动随插件释放。
+- **词表工具的 AI 产物无条件覆盖当前笔记**（[词表工具.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/scripts/presets/文件生成/词表工具.ts)），无备份 / 预览 / 确认。
+- **「AI 出作业」及其 homework-ai 半成品已从脚本清单删除**（2026-11-04 合并时按指示不保留），不再随插件释放。历史风险不再是现行发布面。
 - **词表工具手写 JSON 清洗脆弱**（围栏剥离 / 括号夹取 / 静默兜底），应改结构化输出。
 - **`XdfBaseExtension` 承担过多实现细节**：`reconcileOnStartup` 是 63 行上帝函数；归档/恢复与授课布局耦合在同一 `file-menu` 回调；`relocateArchive` 内联了归档业务逻辑，应下沉。计划拆出 `Reconciler` / `menus/archiveMenu.ts` / `menus/teachingLayoutMenu.ts`（暂缓）。
 - **DB 层**：`Connection.save()` 直接 writeBinary 非原子（[127-144](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts#L127-L144)）；`clear()` 失败后内存/磁盘状态分裂（[161-173](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Connection.ts#L161-L173)）。
