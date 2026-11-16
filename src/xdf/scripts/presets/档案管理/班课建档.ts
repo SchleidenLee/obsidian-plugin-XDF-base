@@ -86,7 +86,7 @@ const MOD = {
 
         const className = await ctx.ask({
             id: "className",
-            label: "请输入班级名称（如：G3-01班）",
+            label: "请输入班级名称（如：3479）",
             type: "text"
         });
         if (!className && ctx.mode === "native") throw new Error("班级名称不能为空");

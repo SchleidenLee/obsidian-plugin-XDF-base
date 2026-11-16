@@ -11,7 +11,7 @@
 
 ## 🟢 进行中
 
-（无。DOC-SYNC 已于 2026-11-06 完成并移入 DEVLOG；下方保留真实未来计划。）
+（无。班课建档示例文案修正已于 2026-11-16 完成并移入 DEVLOG；下方保留真实未来计划。）
 
 > 学员表 DB 镜像（Phase 1~3）已于 2026-11-04 完成：`.duowei` → `student_profile`（非空增量 upsert）+ `class_roster.final_exam_score`，`.duowei` 变更自动触发同步。表结构见 [ARCHITECTURE.md](./ARCHITECTURE.md) / [Schema.ts](file:///x:/AI/projects/XDF-obsidian-system/obsidian-plugin/obsidian-plugin-XDF-base/src/xdf/db/Schema.ts)，变更史见 [DEVLOG.md](./DEVLOG.md)。
 
