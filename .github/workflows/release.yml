@@ -15,7 +15,7 @@ jobs:
       ARTIFACT_DIR: dist
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # base 的 package.json 声明了 packageManager: pnpm@10.32.1，
       # 因此不传 version，由 action-setup 读取 packageManager 决定 pnpm 版本。
@@ -23,7 +23,7 @@ jobs:
         uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -56,7 +56,7 @@ jobs:
           done
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
